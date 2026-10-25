@@ -7,10 +7,14 @@
   var session = load('mda_session');
 
   // ---------------------------------------------------------------- api
-  function api(body) {
+  function api(body, _retry) {
     body = Object.assign({}, body);
     if (session && !body.token) body.token = session.token;
     return fetch(CFG.API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) })
+      .catch(function (err) {   // transient network blip ("Failed to fetch"): retry once after a moment
+        if (_retry) throw new Error('Connection problem. Check your signal and try again.');
+        return new Promise(function (res) { setTimeout(res, 1500); }).then(function () { return api(body, true); }).then(function (j) { return { json: function () { return j; } }; });
+      })
       .then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j.ok && j.code === 'AUTH') { signOut(); throw new Error('Your session expired. Please sign in again.'); }
