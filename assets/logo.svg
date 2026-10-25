@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb400"/><stop offset="1" stop-color="#ff4d1c"/></linearGradient></defs>
+  <circle cx="50" cy="50" r="46" fill="none" stroke="url(#g)" stroke-width="3"/>
+  <!-- simple original eagle mark: spread wings + head -->
+  <path fill="url(#g)" d="M50 30 c-3 0-6 3-6 7 0 2 1 4 2 5 l-6 4 c-8-6-20-8-33-4 8 1 15 4 21 9 -6 1-12 4-16 8 7-2 14-2 20 0 -4 4-6 9-6 14 5-6 11-9 18-10 l6 10 6-10 c7 1 13 4 18 10 0-5-2-10-6-14 6-2 13-2 20 0 -4-4-10-7-16-8 6-5 13-8 21-9 -13-4-25-2-33 4 l-6-4 c1-1 2-3 2-5 0-4-3-7-6-7z"/>
+  <circle cx="47" cy="36" r="1.6" fill="#07070f"/>
+</svg>
