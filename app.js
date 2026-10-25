@@ -25,12 +25,82 @@
   function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
   function save(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
+
+  // ---------------------------------------------------------------- sound (synthesized, 8-bit style)
+  var AC = null;
+  function audio() {
+    try { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); } catch (e) { AC = null; }
+    return AC;
+  }
+  document.addEventListener('pointerdown', function () { audio(); }, { once: true });
+  function screech() {   // eagle cry: two sharp descending sweeps with a touch of noise
+    var ac = audio(); if (!ac) return;
+    var t = ac.currentTime;
+    [[0, 0.38, 2600, 900], [0.42, 0.3, 2300, 1100]].forEach(function (s) {
+      var o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter();
+      o.type = 'sawtooth'; f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 4;
+      o.frequency.setValueAtTime(s[2], t + s[0]); o.frequency.exponentialRampToValueAtTime(s[3], t + s[0] + s[1]);
+      g.gain.setValueAtTime(0.0001, t + s[0]); g.gain.exponentialRampToValueAtTime(0.35, t + s[0] + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + s[0] + s[1]);
+      o.connect(f); f.connect(g); g.connect(ac.destination); o.start(t + s[0]); o.stop(t + s[0] + s[1] + 0.05);
+    });
+  }
+  function jingle() {    // level-complete arpeggio
+    var ac = audio(); if (!ac) return;
+    var t = ac.currentTime, notes = [523, 659, 784, 1047, 784, 1047, 1319];
+    notes.forEach(function (fq, i) {
+      var o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = fq;
+      var s = t + i * 0.09, d = i === notes.length - 1 ? 0.5 : 0.12;
+      g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.18, s + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, s + d);
+      o.connect(g); g.connect(ac.destination); o.start(s); o.stop(s + d + 0.02);
+    });
+  }
+  function blip() {      // tiny tick for progress milestones
+    var ac = audio(); if (!ac) return;
+    var t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = 880;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.08, t + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+    o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 0.07);
+  }
+
+  // ---------------------------------------------------------------- eagles
+  var flyers = $('flyers'), dir = 1, screechNext = false, eagleTimer = null;
+  function fly(opts) {
+    opts = opts || {};
+    var e = document.createElement('div'); e.className = 'flyer';
+    var d = opts.dir || dir; dir = -d;                              // alternate every flight
+    var y0 = opts.y0 != null ? opts.y0 : 8 + Math.random() * 60;   // vh
+    var y1 = opts.y1 != null ? opts.y1 : 8 + Math.random() * 60;
+    var dur = opts.dur || 3.2 + Math.random() * 1.2;
+    var sc = opts.scale || 0.7 + Math.random() * 0.6;
+    e.style.setProperty('--y0', y0 + 'vh'); e.style.setProperty('--y1', y1 + 'vh');
+    e.style.setProperty('--dur', dur + 's'); e.style.setProperty('--sc', sc);
+    e.classList.add(d > 0 ? 'ltr' : 'rtl');
+    flyers.appendChild(e);
+    if (opts.screech || screechNext) { screech(); screechNext = false; }
+    setTimeout(function () { e.remove(); }, dur * 1000 + 200);
+  }
+  function flock() {   // 10 eagles from all directions, staggered within half a second
+    for (var i = 0; i < 10; i++) {
+      (function (i) {
+        setTimeout(function () {
+          fly({ dir: i % 2 ? -1 : 1, y0: 5 + Math.random() * 80, y1: 5 + Math.random() * 80, dur: 2.4 + Math.random() * 1.6, scale: 0.5 + Math.random() * 0.9, screech: i === 0 });
+        }, i * 50);
+      })(i);
+    }
+  }
+  var UPLOAD_GAPS = [10, 25, 15, 45, 35];
+  function eagleSchedule(mode) {
+    clearTimeout(eagleTimer); eagleTimer = null;
+    if (mode === 'gate') { var g = function () { fly(); eagleTimer = setTimeout(g, 6000); }; eagleTimer = setTimeout(g, 1200); }
+    if (mode === 'upload') { var k = 0; var u = function () { fly(); eagleTimer = setTimeout(u, UPLOAD_GAPS[k++ % UPLOAD_GAPS.length] * 1000); }; eagleTimer = setTimeout(u, 1500); }
+  }
+
   // ---------------------------------------------------------------- views
   var views = ['gate1', 'join', 'login', 'upload', 'mine', 'admin'];
   function show(v) {
     views.forEach(function (x) { $('view-' + x).classList.toggle('hidden', x !== v); });
     var el = $('view-' + v); el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter');
     document.body.classList.toggle('gated', ['gate1', 'join', 'login'].indexOf(v) >= 0);
+    eagleSchedule(['gate1', 'join', 'login'].indexOf(v) >= 0 ? 'gate' : (v === 'upload' ? 'upload' : 'off'));
     document.querySelectorAll('.navbtn[data-view]').forEach(function (b) { b.classList.toggle('active', b.dataset.view === v); });
     if (v === 'mine') loadMine();
     if (v === 'admin') { loadAgents(); loadLog(); }
@@ -46,7 +116,7 @@
     if (!admin) api({ action: 'myCalls' }).then(function (j) {
       var week = Date.now() - 7 * 86400000;
       var n = j.calls.filter(function (c) { return new Date(c.uploaded_at).getTime() > week; }).length;
-      $('hud-count').textContent = n + ' CALL' + (n === 1 ? '' : 'S') + ' THIS WEEK';
+      $('hud-count').textContent = n + ' CALL' + (n === 1 ? '' : 'S') + ' UPLOADED THIS WEEK';
     }).catch(function () {});
     document.querySelectorAll('.admin-only').forEach(function (e) { e.classList.toggle('hidden', !admin); });
     document.querySelector('.navbtn[data-view="upload"]').classList.toggle('hidden', admin);
@@ -66,7 +136,8 @@
     api({ action: 'login', username: $('login-user').value, password: $('login-pass').value })
       .then(function (j) {
         session = { token: j.token, display_name: j.display_name, admin: j.admin, expires: j.expires };
-        save('mda_session', session); $('login-pass').value = ''; applySession();
+        save('mda_session', session); $('login-pass').value = ''; screechNext = true; applySession();
+        setTimeout(function () { if (screechNext) fly(); }, 600);   // first flyover (with screech) right after sign-in
       })
       .catch(function (err) { $('login-err').textContent = err.message; })
       .then(function () { $('login-btn').disabled = false; });
@@ -97,8 +168,13 @@
     progress[kind] = done;
     var all = (files.video ? files.video.size : 0) + (files.audio ? files.audio.size : 0);
     var got = progress.video + progress.audio;
-    $('total-fill').style.width = (all ? Math.min(100, Math.round(got / all * 100)) : 0) + '%';
+    var tp = all ? Math.min(100, Math.round(got / all * 100)) : 0;
+    $('total-fill').style.width = tp + '%'; $('total-pct').textContent = tp + '%';
+    if (tp >= 25 && lastMilestone < 25) { blip(); lastMilestone = 25; }
+    if (tp >= 50 && lastMilestone < 50) { blip(); lastMilestone = 50; }
+    if (tp >= 75 && lastMilestone < 75) { blip(); lastMilestone = 75; }
   }
+  var lastMilestone = 0;
 
   // ---------------------------------------------------------------- upload: run
   var uploading = false;
@@ -107,8 +183,8 @@
   $('upload-btn').onclick = function () {
     if (uploading || !files.video || !files.audio) return;
     uploading = true; $('upload-btn').disabled = true; $('upload-err').textContent = '';
-    progress.video = progress.audio = 0; $('total-fill').style.width = '0%'; $('total-wrap').classList.remove('hidden');
-    var status = function (t) { $('upload-status').textContent = t.toUpperCase(); };
+    progress.video = progress.audio = 0; lastMilestone = 0; $('total-fill').style.width = '0%'; $('total-pct').textContent = '0%'; $('total-wrap').classList.remove('hidden');
+    var status = function (t) { $('upload-status').textContent = t.toUpperCase().replace(/\.\.\.|…/g, ''); $('upload-status').classList.toggle('loading', /ING/.test(t.toUpperCase())); };
     var callId, ids = {};
     status('Starting…');
     api({ action: 'startCall', note: $('note').value })
@@ -117,13 +193,12 @@
       .then(function (id) { ids.audio = id; $('drop-audio').classList.add('done'); status('Finishing…');
         return api({ action: 'finishCall', callId: callId, videoFileId: ids.video, audioFileId: ids.audio }); })
       .then(function () {
-        status('DONE!'); $('total-fill').style.width = '100%'; uploading = false;
-        // eagle flies across, then the "Got it!" panel pops in
-        var eagle = $('eagle'); eagle.classList.remove('idle'); eagle.classList.add('fly');
+        status('COMPLETE!'); $('total-fill').style.width = '100%'; $('total-pct').textContent = '100%'; uploading = false;
+        document.body.classList.add('shake'); setTimeout(function () { document.body.classList.remove('shake'); }, 500);
+        jingle(); flock();                       // 10 eagles from all directions + screech + level-complete jingle
         setTimeout(function () {
           $('upload-card').classList.add('hidden'); $('upload-done').classList.remove('hidden');
-        }, 1400);
-        setTimeout(function () { eagle.classList.remove('fly'); eagle.classList.add('idle'); }, 4000);
+        }, 1600);
       })
       .catch(function (err) {
         uploading = false; status('');

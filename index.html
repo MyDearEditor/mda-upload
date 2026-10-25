@@ -16,8 +16,8 @@
   <div class="sky"></div>
   <div class="clouds"></div>
   <div class="scene"></div>
-  <div class="eagle idle" id="eagle"></div>
 </div>
+<div class="flyers" id="flyers" aria-hidden="true"></div>
 
 <header class="top">
   <div class="hud" id="hud">
@@ -99,7 +99,7 @@
             <div class="drop-hint">Drag &amp; drop your video file<br>(or tap to browse)</div>
             <div class="drop-file" id="name-video"></div>
           </div>
-          <div class="bar"><div class="fill" id="bar-video"></div></div>
+          <div class="bar seg"><div class="fill" id="bar-video"></div></div>
           <div class="pct" id="pct-video"></div>
         </div>
         <div class="drop" id="drop-audio" data-kind="audio">
@@ -110,13 +110,13 @@
             <div class="drop-hint">Drag &amp; drop your audio file<br>(or tap to browse)</div>
             <div class="drop-file" id="name-audio"></div>
           </div>
-          <div class="bar"><div class="fill" id="bar-audio"></div></div>
+          <div class="bar seg"><div class="fill" id="bar-audio"></div></div>
           <div class="pct" id="pct-audio"></div>
         </div>
       </div>
       <label class="note-label">NOTE (OPTIONAL)<input id="note" maxlength="200" placeholder="e.g. Facebook lead, closed on the 2nd call"></label>
       <button class="btn gold big" id="upload-btn" disabled><span class="arr">▶</span> UPLOAD BOTH FILES <span class="arr">◀</span></button>
-      <div class="total-bar hidden" id="total-wrap"><div class="total-fill" id="total-fill"></div><div class="total-label" id="upload-status"></div></div>
+      <div class="total-bar hidden" id="total-wrap"><div class="total-fill" id="total-fill"></div><div class="total-label" id="upload-status"></div><div class="total-pct" id="total-pct">0%</div></div>
       <p class="err" id="upload-err"></p>
       <p class="rule">FILM ONLY YOURSELF. NO SCREENS, QUOTE TOOLS, CRM OR PAPERWORK IN THE SHOT.</p>
     </div>
