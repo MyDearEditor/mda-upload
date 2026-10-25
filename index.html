@@ -39,18 +39,58 @@
 
 <main class="wrap">
 
+  <!-- ============ GATE 1: MyDear Academy? ============ -->
+  <section id="view-gate1" class="view gate hidden">
+    <div class="island">
+      <div class="signpost small left" data-go="login"><div class="board yes">YES</div><div class="post"></div></div>
+      <div class="signpost big"><div class="board question">ARE YOU PART OF<br><span class="hl">MYDEAR ACADEMY?</span></div><div class="post"></div></div>
+      <div class="signpost small right" data-go="gate2"><div class="board no">NO</div><div class="post"></div></div>
+      <div class="ground"></div>
+    </div>
+    <p class="gate-hint">▼ PICK A SIGN ▼</p>
+  </section>
+
+  <!-- ============ GATE 2: Legacy Family Life? ============ -->
+  <section id="view-gate2" class="view gate hidden">
+    <div class="island">
+      <div class="signpost small left" data-go="login"><div class="board yes">YES</div><div class="post"></div></div>
+      <div class="signpost big"><div class="board question">ARE YOU PART OF<br><span class="hl">LEGACY FAMILY LIFE?</span></div><div class="post"></div></div>
+      <div class="signpost small right" data-go="join"><div class="board no">NO</div><div class="post"></div></div>
+      <div class="ground"></div>
+    </div>
+    <p class="gate-hint">▼ PICK A SIGN ▼</p>
+    <button class="btn small back" data-go="gate1">◀ BACK</button>
+  </section>
+
+  <!-- ============ JOIN ============ -->
+  <section id="view-join" class="view gate hidden">
+    <div class="island">
+      <div class="signpost big"><div class="board question">NEW PLAYER?<br><span class="hl">JOIN MYDEAR ACADEMY</span><br><span class="tiny">AT LEGACY FAMILY LIFE</span></div><div class="post"></div></div>
+      <div class="ground"></div>
+    </div>
+    <div class="panel glass join-panel">
+      <p class="sub center">We edit your sales calls into Reels, coach you live, and build your book. Grab a time and let's talk.</p>
+      <a class="btn gold big" id="book-btn" target="_blank" rel="noopener"><span class="arr">▶</span> BOOK A TIME WITH MASON <span class="arr">◀</span></a>
+    </div>
+    <button class="btn small back" data-go="gate2">◀ BACK</button>
+  </section>
+
   <!-- ============ SIGN IN ============ -->
-  <section id="view-login" class="view">
+  <section id="view-login" class="view hidden">
+    <div class="island mini">
+      <div class="signpost big"><div class="board question">PLAYER<br><span class="hl">LOGIN</span></div><div class="post"></div></div>
+      <div class="ground"></div>
+    </div>
     <div class="panel glass login-panel">
-      <div class="panel-title">▶ PLAYER LOGIN</div>
-      <p class="sub">Enter the username and password you were given.</p>
+      <p class="sub center">Enter the username and password you were given.</p>
       <form id="login-form" autocomplete="on">
         <label>USERNAME<input id="login-user" name="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
         <label>PASSWORD<input id="login-pass" name="password" type="password" required></label>
-        <button class="btn gold" type="submit" id="login-btn"><span class="arr">▶</span> START <span class="arr">◀</span></button>
+        <button class="btn gold big" type="submit" id="login-btn"><span class="arr">▶</span> PRESS START <span class="arr">◀</span></button>
         <p class="err" id="login-err"></p>
       </form>
     </div>
+    <button class="btn small back" data-go="gate1">◀ BACK</button>
     <div class="steps" aria-hidden="true">
       <div class="step"><div class="num">1</div><div class="ico">📹+📞</div><div>UPLOAD YOUR VIDEO AND YOUR PHONE CALL.</div></div>
       <div class="step"><div class="num">2</div><div class="ico">✂️</div><div>WE EDIT SO YOU CAN SELL.</div></div>

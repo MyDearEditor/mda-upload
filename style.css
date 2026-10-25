@@ -23,7 +23,7 @@ input[hidden] { display: none; }
 @keyframes hover { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-10px) } }
 .eagle.fly { animation: fly var(--eagle-fly) cubic-bezier(.3,.1,.4,1) forwards; }
 @keyframes fly { 0% { left: -30vw; top: 40vh; transform: scale(1.3) } 60% { top: 18vh } 100% { left: 110vw; top: 8vh; transform: scale(.9) } }
-@media (max-width: 700px) { .eagle { width: 120px; height: 84px; top: 9vh; } }
+@media (max-width: 700px) { .eagle { width: 120px; height: 70px; top: 10px; left: auto; right: 8px; } }
 
 /* ---------- pixel helpers ---------- */
 .pixel-border { border: var(--pixel) solid var(--border); outline: var(--pixel) solid var(--border-dark); outline-offset: 0;
@@ -149,3 +149,56 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255,204,26,.
 .pill.Problem, .pill.off { color: var(--danger); border-color: var(--danger); }
 .empty { color: var(--text-dim); padding: 10px 0; }
 .foot { text-align: center; font-family: var(--font-pixel); font-size: 8px; color: #fff; text-shadow: 2px 2px 0 #000; padding: 20px; }
+
+/* ---------- gate islands (Are you part of...?) ---------- */
+.view.enter { animation: enterView .45s cubic-bezier(.2,1.2,.4,1); }
+@keyframes enterView { from { opacity: 0; transform: translateY(24px) scale(.97) } to { opacity: 1; transform: none } }
+body.gated .wrap { padding-top: 10px; }
+.gate { text-align: center; }
+.island { position: relative; width: min(760px, 96vw); height: 360px; margin: 10px auto 0; display: flex; align-items: flex-end; justify-content: center; gap: 4%; padding-bottom: 86px; }
+.island.mini { height: 230px; padding-bottom: 70px; }
+.island .ground { position: absolute; left: 0; right: 0; bottom: 0; height: 90px; pointer-events: none;
+  background:
+    linear-gradient(#6ee257 0 10px, #39b54a 10px 26px, #a0622f 26px 60px, #6b3f1a 60px 70px, transparent 70px),
+    linear-gradient(90deg, transparent 0 6%, #6ee257 6% 94%, transparent 94%);
+  clip-path: polygon(0 0, 100% 0, 92% 40%, 78% 100%, 22% 100%, 8% 40%); animation: bob 5s ease-in-out infinite; }
+.island.mini .ground { height: 70px; }
+.island .ground::before { content: ''; position: absolute; left: 10%; right: 10%; top: 0; height: 10px;
+  background: repeating-linear-gradient(90deg, #8ff07a 0 12px, #6ee257 12px 26px); }
+.island .ground::after { content: ''; position: absolute; left: 25%; right: 25%; bottom: 8px; height: 14px;
+  background: repeating-linear-gradient(90deg, #7a4a22 0 18px, #5a3312 18px 30px); }
+@keyframes bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-8px) } }
+.signpost { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; animation: bob 5s ease-in-out infinite; }
+.signpost .post { width: 22px; height: 70px; background: linear-gradient(90deg, #c98a4a 0 6px, var(--wood) 6px 16px, var(--wood-dark) 16px); border: var(--pixel) solid var(--wood-dark); }
+.signpost .board { background: linear-gradient(180deg, #d19a5c 0 18%, var(--wood) 18% 82%, #8a4f21 82%); border: var(--pixel) solid var(--wood-dark);
+  box-shadow: inset 0 0 0 2px #e2b07a, 0 6px 0 var(--wood-dark); font-family: var(--font-pixel); color: #fff7e3; text-shadow: 2px 2px 0 var(--wood-dark); }
+.signpost .board::before, .signpost .board::after { content: '•'; position: absolute; top: 4px; color: #3a1f08; font-size: 14px; }
+.signpost .board::before { left: 8px; } .signpost .board::after { right: 8px; }
+.signpost .board { position: relative; }
+.signpost.big .board { font-size: clamp(11px, 2.2vw, 17px); line-height: 1.8; padding: 24px 28px; min-width: 260px; max-width: 420px; }
+.signpost.big .board .hl { color: var(--gold); font-size: 1.15em; }
+.signpost.big .board .tiny { font-size: .6em; color: #ffe9c4; }
+.signpost.big .post { height: 56px; }
+.signpost.small { cursor: pointer; transition: transform .15s; }
+.signpost.small:hover { transform: translateY(-8px) scale(1.06); }
+.signpost.small:active { transform: translateY(2px); }
+.signpost.small .board { font-size: clamp(14px, 2.6vw, 22px); padding: 18px 26px; animation: sway 3s ease-in-out infinite; }
+.signpost.small.left .board { transform: rotate(-6deg); animation-delay: -1.5s; }
+.signpost.small.right .board { transform: rotate(6deg); }
+@keyframes sway { 0%,100% { rotate: -2deg } 50% { rotate: 2deg } }
+.signpost .board.yes { color: #9dffb0; } .signpost .board.no { color: #ff9a9a; }
+.signpost.small .board::before, .signpost.small .board::after { content: '►'; color: var(--gold); font-size: 10px; top: 50%; transform: translateY(-50%); }
+.signpost.small .board::after { content: '◄'; }
+.signpost.small .board { padding-left: 34px; padding-right: 34px; }
+.gate-hint { font-family: var(--font-pixel); font-size: 10px; color: #fff; text-shadow: 2px 2px 0 #000; margin: 14px 0 6px; animation: blink 1.4s steps(2) infinite; }
+.btn.back { margin-top: 14px; }
+.join-panel, .login-panel { max-width: 520px; margin-top: -40px; }
+.sub.center { text-align: center; font-size: 19px; }
+@media (max-width: 640px) {
+  .island { height: 420px; flex-wrap: wrap; align-content: flex-end; gap: 10px 6%; padding-bottom: 80px; }
+  .signpost.big { order: -1; flex-basis: 100%; }
+  .signpost.big .board { min-width: 0; }
+}
+
+body.gated .foot { position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; }
+body.gated .sign { display: none; }

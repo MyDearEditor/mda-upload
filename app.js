@@ -22,9 +22,11 @@
   function save(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
   // ---------------------------------------------------------------- views
-  var views = ['login', 'upload', 'mine', 'admin'];
+  var views = ['gate1', 'gate2', 'join', 'login', 'upload', 'mine', 'admin'];
   function show(v) {
     views.forEach(function (x) { $('view-' + x).classList.toggle('hidden', x !== v); });
+    var el = $('view-' + v); el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter');
+    document.body.classList.toggle('gated', ['gate1', 'gate2', 'join', 'login'].indexOf(v) >= 0);
     document.querySelectorAll('.navbtn[data-view]').forEach(function (b) { b.classList.toggle('active', b.dataset.view === v); });
     if (v === 'mine') loadMine();
     if (v === 'admin') { loadAgents(); loadLog(); }
@@ -33,7 +35,7 @@
     var on = !!(session && session.expires > Date.now());
     if (!on) session = null;
     $('nav').classList.toggle('hidden', !on);
-    if (!on) return show('login');
+    if (!on) return show('gate1');
     $('who').textContent = session.display_name;
     var admin = !!session.admin;
     $('hud-count').textContent = admin ? 'ADMIN MODE' : 'HEY ' + String(session.display_name).split(' ')[0].toUpperCase();
@@ -49,6 +51,8 @@
   }
   function signOut() { session = null; save('mda_session', null); applySession(); }
   document.querySelectorAll('.navbtn[data-view]').forEach(function (b) { b.onclick = function () { show(b.dataset.view); }; });
+  document.querySelectorAll('[data-go]').forEach(function (b) { b.onclick = function () { show(b.dataset.go); if (b.dataset.go === 'login') setTimeout(function () { $('login-user').focus(); }, 300); }; });
+  $('book-btn').href = CFG.BOOK_URL || '#';
   $('logout').onclick = signOut;
 
   // ---------------------------------------------------------------- login
