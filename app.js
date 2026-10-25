@@ -36,6 +36,12 @@
     if (!on) return show('login');
     $('who').textContent = session.display_name;
     var admin = !!session.admin;
+    $('hud-count').textContent = admin ? 'ADMIN MODE' : 'HEY ' + String(session.display_name).split(' ')[0].toUpperCase();
+    if (!admin) api({ action: 'myCalls' }).then(function (j) {
+      var week = Date.now() - 7 * 86400000;
+      var n = j.calls.filter(function (c) { return new Date(c.uploaded_at).getTime() > week; }).length;
+      $('hud-count').textContent = n + ' CALL' + (n === 1 ? '' : 'S') + ' THIS WEEK';
+    }).catch(function () {});
     document.querySelectorAll('.admin-only').forEach(function (e) { e.classList.toggle('hidden', !admin); });
     document.querySelector('.navbtn[data-view="upload"]').classList.toggle('hidden', admin);
     document.querySelector('.navbtn[data-view="mine"]').classList.toggle('hidden', admin);
@@ -75,10 +81,15 @@
     $('upload-btn').disabled = !(files.video && files.audio);
   }
   function fmtMB(b) { return b > 1e9 ? (b / 1e9).toFixed(2) + ' GB' : Math.round(b / 1e6) + ' MB'; }
+  var progress = { video: 0, audio: 0 };
   function setBar(kind, done, total) {
     var p = total ? Math.round(done / total * 100) : 0;
     $('bar-' + kind).style.width = p + '%';
     $('pct-' + kind).textContent = total ? p + '% · ' + fmtMB(done) + ' of ' + fmtMB(total) : '';
+    progress[kind] = done;
+    var all = (files.video ? files.video.size : 0) + (files.audio ? files.audio.size : 0);
+    var got = progress.video + progress.audio;
+    $('total-fill').style.width = (all ? Math.min(100, Math.round(got / all * 100)) : 0) + '%';
   }
 
   // ---------------------------------------------------------------- upload: run
@@ -88,7 +99,8 @@
   $('upload-btn').onclick = function () {
     if (uploading || !files.video || !files.audio) return;
     uploading = true; $('upload-btn').disabled = true; $('upload-err').textContent = '';
-    var status = function (t) { $('upload-status').textContent = t; };
+    progress.video = progress.audio = 0; $('total-fill').style.width = '0%'; $('total-wrap').classList.remove('hidden');
+    var status = function (t) { $('upload-status').textContent = t.toUpperCase(); };
     var callId, ids = {};
     status('Starting…');
     api({ action: 'startCall', note: $('note').value })
@@ -97,8 +109,13 @@
       .then(function (id) { ids.audio = id; $('drop-audio').classList.add('done'); status('Finishing…');
         return api({ action: 'finishCall', callId: callId, videoFileId: ids.video, audioFileId: ids.audio }); })
       .then(function () {
-        status(''); uploading = false;
-        $('view-upload').querySelector('.card').classList.add('hidden'); $('upload-done').classList.remove('hidden');
+        status('DONE!'); $('total-fill').style.width = '100%'; uploading = false;
+        // eagle flies across, then the "Got it!" panel pops in
+        var eagle = $('eagle'); eagle.classList.remove('idle'); eagle.classList.add('fly');
+        setTimeout(function () {
+          $('upload-card').classList.add('hidden'); $('upload-done').classList.remove('hidden');
+        }, 1400);
+        setTimeout(function () { eagle.classList.remove('fly'); eagle.classList.add('idle'); }, 4000);
       })
       .catch(function (err) {
         uploading = false; status('');
@@ -108,8 +125,8 @@
   };
   $('upload-again').onclick = function () {
     ['video', 'audio'].forEach(function (k) { setFile(k, null); setBar(k, 0, 0); $('drop-' + k).classList.remove('done'); $('file-' + k).value = ''; });
-    $('note').value = '';
-    $('upload-done').classList.add('hidden'); $('view-upload').querySelector('.card').classList.remove('hidden');
+    $('note').value = ''; $('total-wrap').classList.add('hidden'); $('upload-status').textContent = '';
+    $('upload-done').classList.add('hidden'); $('upload-card').classList.remove('hidden');
   };
 
   // Chunked, resumable upload straight to Google Drive (session URL comes from the doorman).
