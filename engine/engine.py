@@ -129,18 +129,20 @@ def sync_offset(video, audio, tmp):
     return float(offset), conf
 
 
-def transcribe(audio, out_json):
+def transcribe(audio, out_json, t0=0.0, t1=None):
+    """Transcribe audio between t0 and t1 (seconds of the call recording). Timestamps are in full-call time."""
     from faster_whisper import WhisperModel
     m = WhisperModel(WHISPER, device='cpu', compute_type='int8')
-    raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', audio, '-ac', '1', '-ar', '16000', '-f', 'f32le', '-'],
-                         capture_output=True, check=True).stdout
+    cmd = ['ffmpeg', '-v', 'error', '-ss', f'{max(0.0, t0):.3f}']
+    if t1 is not None: cmd += ['-t', f'{max(0.0, t1 - t0):.3f}']
+    raw = subprocess.run(cmd + ['-i', audio, '-ac', '1', '-ar', '16000', '-f', 'f32le', '-'], capture_output=True, check=True).stdout
     arr = np.frombuffer(raw, np.float32)
     segs, _ = m.transcribe(arr, language='en', word_timestamps=True, vad_filter=False, beam_size=5)
     out = []
     for sg in segs:
         if not sg.words: continue
-        out.append({'start': sg.start, 'end': sg.end, 'text': sg.text,
-                    'words': [{'w': w.word, 's': w.start, 'e': w.end} for w in sg.words]})
+        out.append({'start': sg.start + t0, 'end': sg.end + t0, 'text': sg.text,
+                    'words': [{'w': w.word, 's': w.start + t0, 'e': w.end + t0} for w in sg.words]})
     json.dump(out, open(out_json, 'w'), indent=1)
     return out
 
@@ -232,21 +234,22 @@ def process(call):
                 reason=f'The call recording did not match the phone video (sync confidence {conf:.1f}). Please re-upload the matching pair.')
             return
 
-        log.info('%s: transcribing', cid)
-        tpath = os.path.join(d, 'call.json')
-        transcript = transcribe(audio, tpath)
-        if sum(len(sg['words']) for sg in transcript) < 80:
-            api('engineProblem', callId=cid, notifyAgent=True, reason='The call recording was too short or too quiet to transcribe.')
+        # RULE: edit only where there is video. Audio t = video t - offset, so the usable call window is:
+        vdur = media_duration(video)
+        adur = media_duration(audio)
+        a_min = max(0.0, -offset) + 0.5
+        a_max = min(adur, vdur - offset) - 0.5
+        log.info('%s: video %.0fs, recording %.0fs, usable window %.1f-%.1f s (%.0fs)', cid, vdur, adur, a_min, a_max, a_max - a_min)
+        if a_max - a_min < 45:
+            api('engineProblem', callId=cid, notifyAgent=True, reason='The video and the call recording barely overlap (less than 45 seconds). Please upload the video and recording of the same call.')
             return
 
-        # only the part of the call that has video behind it (audio t = video t - offset)
-        vdur = media_duration(video)
-        a_min = max(0.0, -offset) + 0.5
-        a_max = vdur - offset - 0.5
+        log.info('%s: transcribing the video window only', cid)
+        tpath = os.path.join(d, 'call.json')
+        transcript = transcribe(audio, tpath, a_min, a_max)
         usable = [sg for sg in transcript if sg['start'] >= a_min and sg['end'] <= a_max]
-        log.info('%s: video %.0fs, usable audio window %.1f-%.1f s, %d/%d segments', cid, vdur, a_min, a_max, len(usable), len(transcript))
         if sum(len(sg['words']) for sg in usable) < 80:
-            api('engineProblem', callId=cid, notifyAgent=True, reason='The video and the call recording barely overlap. Please upload the video and recording of the same call.')
+            api('engineProblem', callId=cid, notifyAgent=True, reason='The part of the call that has video was too short or too quiet to transcribe.')
             return
 
         log.info('%s: picking clips', cid)

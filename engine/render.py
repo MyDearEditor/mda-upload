@@ -161,7 +161,7 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Cap,Poppins,72,&H00FFFFFF,&H00FFFFFF,{RED},{RED},-1,0,0,0,100,100,0,0,3,14,0,2,90,90,520,1
+Style: Cap,Poppins,72,&H00FFFFFF,&H00FFFFFF,{RED},{RED},-1,0,0,0,100,100,0,0,3,14,0,2,90,90,{cfg.get('cap_margin_v', 330)},1
 Style: Hook,Poppins,66,&H00FFFFFF,&H00FFFFFF,{RED},{RED},-1,0,0,0,100,100,0,0,3,18,0,8,90,90,200,1
 
 [Events]
