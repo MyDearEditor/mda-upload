@@ -26,11 +26,11 @@
   function save(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
   // ---------------------------------------------------------------- views
-  var views = ['gate1', 'gate2', 'join', 'login', 'upload', 'mine', 'admin'];
+  var views = ['gate1', 'join', 'login', 'upload', 'mine', 'admin'];
   function show(v) {
     views.forEach(function (x) { $('view-' + x).classList.toggle('hidden', x !== v); });
     var el = $('view-' + v); el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter');
-    document.body.classList.toggle('gated', ['gate1', 'gate2', 'join', 'login'].indexOf(v) >= 0);
+    document.body.classList.toggle('gated', ['gate1', 'join', 'login'].indexOf(v) >= 0);
     document.querySelectorAll('.navbtn[data-view]').forEach(function (b) { b.classList.toggle('active', b.dataset.view === v); });
     if (v === 'mine') loadMine();
     if (v === 'admin') { loadAgents(); loadLog(); }
