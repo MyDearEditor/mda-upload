@@ -108,6 +108,16 @@ def wav8k(src, dst):
     return x.astype(np.float32)
 
 
+def synced_full_video(video, audio, offset, a_min, a_max, out):
+    """Original phone video (no re-encode) with the clean call audio replacing the phone audio, trimmed to the overlap."""
+    v0 = a_min + offset
+    dur = a_max - a_min
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', f'{v0:.3f}', '-t', f'{dur:.3f}', '-i', video,
+                    '-ss', f'{a_min:.3f}', '-t', f'{dur:.3f}', '-i', audio,
+                    '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', out], check=True)
+    return out
+
+
 def media_duration(path):
     out = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path],
                          capture_output=True, text=True).stdout.strip()
@@ -244,6 +254,25 @@ def process(call):
             api('engineProblem', callId=cid, notifyAgent=True, reason='The video and the call recording barely overlap (less than 45 seconds). Please upload the video and recording of the same call.')
             return
 
+        mode = call.get('mode') or 'clips'
+        style = call.get('style') or {}
+        date = str(call.get('uploaded_at', ''))[:10] or datetime.date.today().isoformat()
+        delivered, dropped = [], []
+
+        # always deliver the full synced video (original quality, clean call audio) so agents can edit themselves
+        try:
+            full = synced_full_video(video, audio, offset, a_min, a_max, os.path.join(d, 'out', 'full.mp4'))
+            fid_full = drive_upload(full, f'{date} - Full call (synced audio).mp4', call['agent_folder_id'], 'video/mp4')
+            log.info('%s: delivered full synced video (%.0fs)', cid, a_max - a_min)
+        except Exception as ex:
+            log.warning('%s: full synced video failed: %s', cid, ex); fid_full = None
+        if mode == 'sync':
+            if fid_full:
+                api('engineDone', callId=cid, clipFileIds=[], clipCount=0)
+            else:
+                api('engineProblem', callId=cid, reason='Could not build the synced full video.')
+            return
+
         log.info('%s: transcribing the video window only', cid)
         tpath = os.path.join(d, 'call.json')
         transcript = transcribe(audio, tpath, a_min, a_max)
@@ -259,15 +288,13 @@ def process(call):
         name_keys = sorted({_norm(n) for n in names if len(_norm(n)) >= 3})
         log.info('%s: %d clips, %d name keys, %d cut spans', cid, len(clips), len(name_keys), len(cut_spans))
 
-        delivered, dropped = [], []
-        date = str(call.get('uploaded_at', ''))[:10] or datetime.date.today().isoformat()
         for i, c in enumerate(clips, 1):
             hook = re.sub(r'[\\/:*?"<>|]', '', str(c.get('hook', f'Clip {i}')).strip())[:60] or f'Clip {i}'
             out = os.path.join(d, 'out', f'clip{i}.mp4')
             try:
                 res = render({'video': video, 'audio': audio, 'offset': offset, 'transcript': tpath,
                               'start': float(c['start']), 'end': float(c['end']), 'hook': hook, 'out': out,
-                              'bleep_words': name_keys, 'cut_spans': cut_spans, 'gap_max': 0.6, 'gap_pad': 0.2})
+                              'bleep_words': name_keys, 'cut_spans': cut_spans, 'gap_max': 0.6, 'gap_pad': 0.2, 'style': style})
             except Exception as ex:
                 log.warning('%s: clip %d render failed: %s', cid, i, ex); dropped.append(f'{hook}: render failed'); continue
             if not 20 <= res['duration'] <= 75:
@@ -288,6 +315,9 @@ def process(call):
         if delivered:
             api('engineDone', callId=cid, clipFileIds=delivered, clipCount=len(delivered))
             log.info('%s: done, %d delivered, %d dropped', cid, len(delivered), len(dropped))
+        elif fid_full:
+            api('engineDone', callId=cid, clipFileIds=[], clipCount=0)
+            log.info('%s: no clip passed; full synced video delivered', cid)
         else:
             api('engineProblem', callId=cid, reason='No clip passed the compliance check.\n' + '\n'.join(dropped))
     except Exception as ex:

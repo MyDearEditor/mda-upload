@@ -153,6 +153,15 @@ def _render(cfg, out_path, tmp):
             cards.append(cur); cur = []
     if cur: cards.append(cur)
 
+    st = cfg.get('style') or {}
+    def bgr(hexcol, default):
+        h = str(hexcol or default).lstrip('#')
+        if len(h) != 6: h = default.lstrip('#')
+        return '&H00' + h[4:6] + h[2:4] + h[0:2]
+    font = st.get('font') or 'Poppins'
+    cap_text, cap_box = bgr(st.get('text'), '#FFFFFF'), bgr(st.get('box'), '#E01B2B')
+    hook_text, hook_box = bgr(st.get('hook_text'), '#FFFFFF'), bgr(st.get('hook_box'), '#E01B2B')
+    margin_v = {'low': 330, 'mid': 520, 'high': 760}.get(st.get('position'), cfg.get('cap_margin_v', 330))
     ass = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -161,8 +170,8 @@ WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Cap,Poppins,72,&H00FFFFFF,&H00FFFFFF,{RED},{RED},-1,0,0,0,100,100,0,0,3,14,0,2,90,90,{cfg.get('cap_margin_v', 330)},1
-Style: Hook,Poppins,66,&H00FFFFFF,&H00FFFFFF,{RED},{RED},-1,0,0,0,100,100,0,0,3,18,0,8,90,90,200,1
+Style: Cap,{font},72,{cap_text},{cap_text},{cap_box},{cap_box},-1,0,0,0,100,100,0,0,3,14,0,2,90,90,{margin_v},1
+Style: Hook,{font},66,{hook_text},{hook_text},{hook_box},{hook_box},-1,0,0,0,100,100,0,0,3,18,0,8,90,90,200,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

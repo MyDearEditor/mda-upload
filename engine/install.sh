@@ -13,8 +13,16 @@ if [ ! -f /usr/local/share/fonts/poppins/Poppins-Bold.ttf ]; then
   for w in Bold Black SemiBold; do
     curl -fsSL "https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-$w.ttf" -o "/usr/local/share/fonts/poppins/Poppins-$w.ttf"
   done
-  fc-cache -f
 fi
+# caption style fonts (agents pick these on the My Style screen)
+mkdir -p /usr/local/share/fonts/mda
+for f in "ofl/montserrat/Montserrat[wght].ttf|Montserrat.ttf" "ofl/bebasneue/BebasNeue-Regular.ttf|BebasNeue-Regular.ttf" \
+         "ofl/anton/Anton-Regular.ttf|Anton-Regular.ttf" "ofl/oswald/Oswald[wght].ttf|Oswald.ttf" \
+         "ofl/bangers/Bangers-Regular.ttf|Bangers-Regular.ttf" "ofl/luckiestguy/LuckiestGuy-Regular.ttf|LuckiestGuy-Regular.ttf"; do
+  src="${f%%|*}"; dst="${f##*|}"
+  [ -f "/usr/local/share/fonts/mda/$dst" ] || curl -fsSL "https://github.com/google/fonts/raw/main/$src" -o "/usr/local/share/fonts/mda/$dst" || true
+done
+fc-cache -f
 
 # Code
 mkdir -p /opt/mda
