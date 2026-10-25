@@ -10,15 +10,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="scene.css">
 </head>
 <body>
 <div class="backdrop" aria-hidden="true">
   <div class="sky"></div>
   <div class="clouds"></div>
-  <div class="scene"></div>
+  <div class="scene-layer" id="scene-layer">
+    <div class="scene"></div>
+    <div class="water" aria-hidden="true"></div>
+    <div class="isl" id="isl1"></div><div class="isl" id="isl2"></div><div class="isl" id="isl3"></div>
+  </div>
 </div>
-<div class="flyers" id="flyers" aria-hidden="true"></div>
+<div class="flyers" id="flyers" aria-hidden="true"><div class="fox" id="fox"></div></div>
 
+<button class="mute" id="mute" title="Sound on/off" aria-label="Sound on/off">🔊</button>
 <header class="top">
   <div class="hud" id="hud">
     <div class="avatar"></div>
@@ -44,23 +50,35 @@
     <div class="island">
       <div class="signpost small left" data-go="login"><div class="board yes">YES</div><div class="post"></div></div>
       <div class="signpost big"><div class="board question">ARE YOU PART OF<br><span class="hl">MYDEAR ACADEMY?</span></div><div class="post"></div></div>
-      <div class="signpost small right" data-go="join"><div class="board no">NO</div><div class="post"></div></div>
+      <div class="signpost small right" data-go="gate2"><div class="board no">NO</div><div class="post"></div></div>
       <div class="ground"></div>
     </div>
     <p class="gate-hint">▼ PICK A SIGN ▼</p>
   </section>
 
+  <!-- ============ GATE 2: Legacy Family Life? ============ -->
+  <section id="view-gate2" class="view gate hidden">
+    <div class="island">
+      <div class="signpost small left" data-go="login"><div class="board yes">YES</div><div class="post"></div></div>
+      <div class="signpost big"><div class="board question">ARE YOU PART OF<br><span class="hl">LEGACY FAMILY LIFE?</span></div><div class="post"></div></div>
+      <div class="signpost small right" data-go="join"><div class="board no">NO</div><div class="post"></div></div>
+      <div class="ground"></div>
+    </div>
+    <p class="gate-hint">▼ PICK A SIGN ▼</p>
+    <button class="btn small back" data-go="gate1">◀ BACK</button>
+  </section>
+
   <!-- ============ JOIN ============ -->
   <section id="view-join" class="view gate hidden">
     <div class="island">
-      <div class="signpost big"><div class="board question">NEW PLAYER?<br><span class="hl">JOIN MYDEAR ACADEMY</span></div><div class="post"></div></div>
+      <div class="signpost big"><div class="board question">NEW PLAYER?<br><span class="hl">JOIN MYDEAR ACADEMY</span><br><span class="tiny">AT LEGACY FAMILY LIFE</span></div><div class="post"></div></div>
       <div class="ground"></div>
     </div>
     <div class="panel glass join-panel">
       <p class="sub center">We edit your sales calls into Reels, coach you live, and build your book. Grab a time and let's talk.</p>
       <a class="btn gold big" id="book-btn" target="_blank" rel="noopener"><span class="arr">▶</span> BOOK A TIME WITH MASON <span class="arr">◀</span></a>
     </div>
-    <button class="btn small back" data-go="gate1">◀ BACK</button>
+    <button class="btn small back" data-go="gate2">◀ BACK</button>
   </section>
 
   <!-- ============ SIGN IN ============ -->

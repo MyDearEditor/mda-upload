@@ -1,0 +1,46 @@
+/* ---------- living scenery: a cover-sized layer so sprites line up with the painted scene ---------- */
+/* scene.png is 1670x596 (ratio 2.802). The layer is sized exactly like background-size: cover, centered. */
+.scene-layer { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: max(100vw, calc(100vh * 2.802)); height: max(100vh, calc(100vw / 2.802)); }
+.scene-layer .scene { position: absolute; inset: 0; background: var(--art-scene) center / 100% 100% no-repeat; }
+@media (max-aspect-ratio: 3/4) {   /* portrait phones use the tall crop; island sprites are hidden there */
+  .scene-layer { width: 100vw; height: 100vh; transform: translate(-50%, -50%); }
+  .scene-layer .scene { background: var(--art-scene-tall), var(--art-scene); background-size: cover; background-position: center; }
+  .isl { display: none; }
+  .water { top: 60%; height: 18%; }
+}
+
+/* floating islands cut out of the scene; they sit on their own painted spot and bob */
+.isl { position: absolute; background: center / 100% auto no-repeat; animation: isl var(--isl-speed, 6s) ease-in-out infinite; will-change: transform; }
+#isl1 { background-image: url("assets/island1.png"); animation-delay: 0s; }
+#isl2 { background-image: url("assets/island2.png"); animation-delay: -2.1s; }
+#isl3 { background-image: url("assets/island3.png"); animation-delay: -3.7s; }
+@keyframes isl { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-1vh) } }
+body.uploadview .isl { animation-duration: 2.4s; }          /* loading screen: faster, livelier */
+body.uploadview #isl2 { animation-duration: 1.9s; }
+body.uploadview #isl3 { animation-duration: 2.9s; }
+
+/* water: moving highlight ripples over the painted lake */
+.water { position: absolute; left: 0; right: 0; top: 73%; height: 17%; pointer-events: none; mix-blend-mode: screen; opacity: .45;
+  background:
+    repeating-linear-gradient(180deg, transparent 0 9px, rgba(255,255,255,.16) 9px 10px, transparent 10px 23px),
+    repeating-linear-gradient(90deg, transparent 0 34px, rgba(255,255,255,.14) 34px 52px, transparent 52px 90px);
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 20%, #000 80%, transparent); mask-image: linear-gradient(180deg, transparent, #000 20%, #000 80%, transparent);
+  animation: ripple 7s linear infinite; }
+@keyframes ripple { from { background-position: 0 0, 0 0 } to { background-position: 0 23px, 180px 0 } }
+body.uploadview .water { animation-duration: 4s; opacity: .6; }
+
+/* the fox: trots along the grass now and then (JS adds .run or .run.back) */
+.fox { position: absolute; bottom: 1.5vh; left: -12%; width: 110px; z-index: 6; aspect-ratio: 24 / 7; background: url("assets/fox.png") 0 0 / 200% 100% no-repeat;
+  display: none; image-rendering: pixelated; }
+.fox.run { display: block; animation: foxRun 7s linear forwards, foxLegs .22s steps(2) infinite; }
+.fox.run.back { animation: foxRunBack 7s linear forwards, foxLegs .22s steps(2) infinite; }
+@keyframes foxRun  { from { left: -12%; transform: scaleX(1) }  to { left: 108%; transform: scaleX(1) } }
+@keyframes foxRunBack { from { left: 108%; transform: scaleX(-1) } to { left: -12%; transform: scaleX(-1) } }
+@keyframes foxLegs { from { background-position: 0 0 } to { background-position: 200% 0 } }
+@media (max-width: 700px) { .fox { width: 70px; bottom: 1vh; } }
+
+/* mute button */
+.mute { position: fixed; right: 12px; bottom: 12px; z-index: 50; font-size: 18px; line-height: 1; width: 44px; height: 44px; cursor: pointer;
+  background: var(--panel); color: #fff; border: var(--pixel) solid var(--border); outline: var(--pixel) solid var(--border-dark); }
+.mute.off { opacity: .6; }

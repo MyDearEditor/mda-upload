@@ -61,6 +61,70 @@
     o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 0.07);
   }
 
+  // ---------------------------------------------------------------- ambient nature (wind, leaves, birds) — synthesized, loops forever
+  var ambient = null, muted = load('mda_muted') === true;
+  function noiseBuffer(ac, seconds) {
+    var n = ac.sampleRate * seconds, buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0), b0 = 0, b1 = 0, b2 = 0;
+    for (var i = 0; i < n; i++) {   // pink-ish noise
+      var w = Math.random() * 2 - 1; b0 = 0.997 * b0 + 0.029 * w; b1 = 0.985 * b1 + 0.032 * w; b2 = 0.95 * b2 + 0.048 * w;
+      d[i] = (b0 + b1 + b2 + w * 0.05) * 0.6;
+    }
+    return buf;
+  }
+  function startAmbient() {
+    var ac = audio(); if (!ac || ambient) return;
+    var master = ac.createGain(); master.gain.value = muted ? 0 : 0.5; master.connect(ac.destination);
+    // wind: looping noise through a slowly wandering low-pass
+    var wind = ac.createBufferSource(); wind.buffer = noiseBuffer(ac, 6); wind.loop = true;
+    var lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420; lp.Q.value = 0.6;
+    var wg = ac.createGain(); wg.gain.value = 0.16;
+    var lfo = ac.createOscillator(), lfoG = ac.createGain(); lfo.frequency.value = 0.07; lfoG.gain.value = 220; lfo.connect(lfoG); lfoG.connect(lp.frequency);
+    var lfo2 = ac.createOscillator(), lfo2G = ac.createGain(); lfo2.frequency.value = 0.11; lfo2G.gain.value = 0.06; lfo2.connect(lfo2G); lfo2G.connect(wg.gain);
+    wind.connect(lp); lp.connect(wg); wg.connect(master); wind.start(); lfo.start(); lfo2.start();
+    // leaves: high-passed noise that rustles in gusts
+    var leaves = ac.createBufferSource(); leaves.buffer = noiseBuffer(ac, 4); leaves.loop = true;
+    var hp = ac.createBiquadFilter(); hp.type = 'bandpass'; hp.frequency.value = 3200; hp.Q.value = 0.8;
+    var lg = ac.createGain(); lg.gain.value = 0.0;
+    leaves.connect(hp); hp.connect(lg); lg.connect(master); leaves.start();
+    (function gust() {
+      var t = ac.currentTime, len = 1.5 + Math.random() * 3;
+      lg.gain.cancelScheduledValues(t); lg.gain.setValueAtTime(lg.gain.value, t);
+      lg.gain.linearRampToValueAtTime(0.025 + Math.random() * 0.03, t + len * 0.4); lg.gain.linearRampToValueAtTime(0.004, t + len);
+      setTimeout(gust, (len + 2 + Math.random() * 6) * 1000);
+    })();
+    // birds: little chirp phrases at random intervals, random pitch and stereo-ish position
+    function chirp() {
+      var t = ac.currentTime, base = 2200 + Math.random() * 1800, notes = 2 + Math.floor(Math.random() * 4);
+      var pan = ac.createStereoPanner ? ac.createStereoPanner() : null; if (pan) { pan.pan.value = Math.random() * 1.6 - 0.8; pan.connect(master); }
+      for (var i = 0; i < notes; i++) {
+        var o = ac.createOscillator(), g = ac.createGain(), s = t + i * (0.09 + Math.random() * 0.08), d = 0.06 + Math.random() * 0.08;
+        o.type = 'sine'; o.frequency.setValueAtTime(base * (0.9 + Math.random() * 0.3), s); o.frequency.exponentialRampToValueAtTime(base * (1.1 + Math.random() * 0.4), s + d);
+        g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.05, s + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, s + d);
+        o.connect(g); g.connect(pan || master); o.start(s); o.stop(s + d + 0.02);
+      }
+      setTimeout(chirp, 2500 + Math.random() * 7000);
+    }
+    setTimeout(chirp, 1500);
+    ambient = { master: master };
+  }
+  document.addEventListener('pointerdown', function () { startAmbient(); }, { once: true });
+  $('mute').classList.toggle('off', muted); $('mute').textContent = muted ? '🔇' : '🔊';
+  $('mute').onclick = function (e) {
+    e.stopPropagation(); muted = !muted; save('mda_muted', muted);
+    $('mute').classList.toggle('off', muted); $('mute').textContent = muted ? '🔇' : '🔊';
+    if (ambient) ambient.master.gain.setTargetAtTime(muted ? 0 : 0.5, audio().currentTime, 0.2);
+  };
+
+  // ---------------------------------------------------------------- scenery: island sprites + the fox
+  var ISLANDS = { isl1: { left: 74.251, top: 5.034, width: 13.174 }, isl2: { left: 66.467, top: 33.557, width: 7.784 }, isl3: { left: 21.557, top: 34.396, width: 6.587 } };
+  Object.keys(ISLANDS).forEach(function (id) { var p = ISLANDS[id], el = $(id); el.style.left = p.left + '%'; el.style.top = p.top + '%'; el.style.width = p.width + '%'; el.style.aspectRatio = id === 'isl1' ? '220 / 230' : (id === 'isl2' ? '130 / 110' : '110 / 110'); });
+  (function foxLoop() {
+    var fox = $('fox'), back = Math.random() < 0.5;
+    fox.className = 'fox run' + (back ? ' back' : '');
+    setTimeout(function () { fox.className = 'fox'; }, 7200);
+    setTimeout(foxLoop, 25000 + Math.random() * 45000);   // every 25–70 s
+  })();
+
   // ---------------------------------------------------------------- eagles
   var flyers = $('flyers'), dir = 1, screechNext = false, eagleTimer = null;
   function fly(opts) {
@@ -95,12 +159,13 @@
   }
 
   // ---------------------------------------------------------------- views
-  var views = ['gate1', 'join', 'login', 'upload', 'mine', 'admin'];
+  var views = ['gate1', 'gate2', 'join', 'login', 'upload', 'mine', 'admin'];
   function show(v) {
     views.forEach(function (x) { $('view-' + x).classList.toggle('hidden', x !== v); });
     var el = $('view-' + v); el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter');
-    document.body.classList.toggle('gated', ['gate1', 'join', 'login'].indexOf(v) >= 0);
-    eagleSchedule(['gate1', 'join', 'login'].indexOf(v) >= 0 ? 'gate' : (v === 'upload' ? 'upload' : 'off'));
+    document.body.classList.toggle('gated', ['gate1', 'gate2', 'join', 'login'].indexOf(v) >= 0);
+    document.body.classList.toggle('uploadview', v === 'upload');
+    eagleSchedule(['gate1', 'gate2', 'join', 'login'].indexOf(v) >= 0 ? 'gate' : (v === 'upload' ? 'upload' : 'off'));
     document.querySelectorAll('.navbtn[data-view]').forEach(function (b) { b.classList.toggle('active', b.dataset.view === v); });
     if (v === 'mine') loadMine();
     if (v === 'admin') { loadAgents(); loadLog(); }
