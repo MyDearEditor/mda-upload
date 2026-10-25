@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex">
 <link rel="icon" href="assets/avatar.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="scene.css">
@@ -24,6 +24,7 @@
 </div>
 <div class="flyers" id="flyers" aria-hidden="true"><div class="fox" id="fox"></div></div>
 
+<button class="mute eagles" id="eagles-btn" title="Eagles on/off" aria-label="Eagles on/off">🦅</button>
 <button class="mute" id="mute" title="Sound on/off" aria-label="Sound on/off">🔊</button>
 <header class="top">
   <div class="hud" id="hud">
@@ -37,6 +38,7 @@
   <nav id="nav" class="nav hidden">
     <button data-view="upload" class="navbtn active">Upload</button>
     <button data-view="mine" class="navbtn">My uploads</button>
+    <button data-view="style" class="navbtn">My style</button>
     <button data-view="admin" class="navbtn admin-only hidden">Admin</button>
     <button id="logout" class="navbtn ghost">Sign out</button>
     <span class="who" id="who"></span>
@@ -132,6 +134,11 @@
           <div class="pct" id="pct-audio"></div>
         </div>
       </div>
+      <div class="mode-switch" id="mode-switch" role="radiogroup" aria-label="What do you want back">
+        <div class="mode-title">WHAT DO YOU WANT BACK?</div>
+        <label class="mode-opt"><input type="radio" name="mode" value="clips" checked><span><b>CLIPS + SYNCED FULL VIDEO</b><small>We cut Reels for you, and you also get the whole video with the clean call audio.</small></span></label>
+        <label class="mode-opt"><input type="radio" name="mode" value="sync"><span><b>SYNCED FULL VIDEO ONLY</b><small>No clips. Just your video with the call audio synced, ready to edit yourself.</small></span></label>
+      </div>
       <label class="note-label">NOTE (OPTIONAL)<input id="note" maxlength="200" placeholder="e.g. Facebook lead, closed on the 2nd call"></label>
       <button class="btn gold big" id="upload-btn" disabled><span class="arr">▶</span> UPLOAD BOTH FILES <span class="arr">◀</span></button>
       <div class="total-bar hidden" id="total-wrap"><div class="total-fill" id="total-fill"></div><div class="total-label" id="upload-status"></div><div class="total-pct" id="total-pct">0%</div></div>
@@ -162,12 +169,40 @@
     </div>
   </section>
 
+  <!-- ============ MY STYLE ============ -->
+  <section id="view-style" class="view hidden">
+    <div class="panel glass">
+      <div class="panel-title">▶ MY CAPTION STYLE</div>
+      <p class="sub">Pick how your clips look. This applies to every call you upload from now on.</p>
+      <div class="style-grid">
+        <div class="style-form">
+          <label>FONT<select id="st-font"></select></label>
+          <div class="grid2">
+            <label>CAPTION BOX<input id="st-box" type="color" value="#E01B2B"></label>
+            <label>CAPTION TEXT<input id="st-text" type="color" value="#FFFFFF"></label>
+            <label>HOOK BANNER BOX<input id="st-hook-box" type="color" value="#E01B2B"></label>
+            <label>HOOK BANNER TEXT<input id="st-hook-text" type="color" value="#FFFFFF"></label>
+          </div>
+          <label>CAPTION HEIGHT<select id="st-pos"><option value="low">Low (default, clear of your face)</option><option value="mid">Middle</option><option value="high">High</option></select></label>
+          <div class="presets" id="presets"></div>
+          <button class="btn gold big" id="st-save"><span class="arr">▶</span> SAVE MY STYLE</button>
+          <p class="status" id="st-status"></p><p class="err" id="st-err"></p>
+        </div>
+        <div class="phone-preview" id="preview">
+          <div class="pv-hook" id="pv-hook">ALWAYS ASK ABOUT THE WAITING PERIOD</div>
+          <div class="pv-face"></div>
+          <div class="pv-cap" id="pv-cap">SO WHAT MADE YOU LOOK INTO COVERAGE TODAY</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- ============ ADMIN ============ -->
   <section id="view-admin" class="view hidden">
     <div class="panel glass">
       <div class="panel-title">▶ ADD AN AGENT</div>
       <form id="add-form" class="grid2" autocomplete="off">
-        <label>USERNAME<input name="username" required pattern="[a-z0-9_.\-]{2,30}" autocapitalize="none"></label>
+        <label>USERNAME <small>(login handle, not an email: lowercase letters, numbers, dots, dashes — e.g. chloe.fox)</small><input name="username" required pattern="[a-z0-9_.\-]{2,30}" autocapitalize="none" title="2-30 characters: lowercase letters, numbers, dots, dashes or underscores. No @ or spaces." placeholder="chloe.fox"></label>
         <label>PASSWORD <small>(8+ chars)</small><input name="password" required minlength="8"></label>
         <label>DISPLAY NAME<input name="display_name" required placeholder="Quinton Smith"></label>
         <label>LFL EMAIL<input name="email" type="email" required placeholder="name@legacyfamilylife.com"></label>

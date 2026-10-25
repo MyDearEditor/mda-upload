@@ -127,8 +127,15 @@
 
   // ---------------------------------------------------------------- eagles
   var flyers = $('flyers'), dir = 1, screechNext = false, eagleTimer = null;
+  var eaglesOff = load('mda_eagles_off') === true;
+  $('eagles-btn').classList.toggle('off', eaglesOff); $('eagles-btn').title = eaglesOff ? 'Eagles are off (tap to turn on)' : 'Eagles are on (tap to turn off)';
+  $('eagles-btn').onclick = function (e) {
+    e.stopPropagation(); eaglesOff = !eaglesOff; save('mda_eagles_off', eaglesOff);
+    $('eagles-btn').classList.toggle('off', eaglesOff); $('eagles-btn').title = eaglesOff ? 'Eagles are off (tap to turn on)' : 'Eagles are on (tap to turn off)';
+  };
   function fly(opts) {
     opts = opts || {};
+    if (eaglesOff && !opts.force) return;
     var e = document.createElement('div'); e.className = 'flyer';
     var d = opts.dir || dir; dir = -d;                              // alternate every flight
     var y0 = opts.y0 != null ? opts.y0 : 8 + Math.random() * 60;   // vh
@@ -142,12 +149,12 @@
     if (opts.screech || screechNext) { screech(); screechNext = false; }
     setTimeout(function () { e.remove(); }, dur * 1000 + 200);
   }
-  function flock() {   // 10 eagles from all directions, staggered within half a second
-    for (var i = 0; i < 10; i++) {
+  function flock() {   // 15 eagles from all directions, staggered within half a second
+    for (var i = 0; i < 15; i++) {
       (function (i) {
         setTimeout(function () {
-          fly({ dir: i % 2 ? -1 : 1, y0: 5 + Math.random() * 80, y1: 5 + Math.random() * 80, dur: 2.4 + Math.random() * 1.6, scale: 0.5 + Math.random() * 0.9, screech: i === 0 });
-        }, i * 50);
+          fly({ force: true, dir: i % 2 ? -1 : 1, y0: 5 + Math.random() * 80, y1: 5 + Math.random() * 80, dur: 2.4 + Math.random() * 1.6, scale: 0.5 + Math.random() * 0.9, screech: i === 0 });
+        }, i * 33);
       })(i);
     }
   }
@@ -159,7 +166,7 @@
   }
 
   // ---------------------------------------------------------------- views
-  var views = ['gate1', 'gate2', 'join', 'login', 'upload', 'mine', 'admin'];
+  var views = ['gate1', 'gate2', 'join', 'login', 'upload', 'mine', 'style', 'admin'];
   function show(v) {
     views.forEach(function (x) { $('view-' + x).classList.toggle('hidden', x !== v); });
     var el = $('view-' + v); el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter');
@@ -168,6 +175,7 @@
     eagleSchedule(['gate1', 'gate2', 'join', 'login'].indexOf(v) >= 0 ? 'gate' : (v === 'upload' ? 'upload' : 'off'));
     document.querySelectorAll('.navbtn[data-view]').forEach(function (b) { b.classList.toggle('active', b.dataset.view === v); });
     if (v === 'mine') loadMine();
+    if (v === 'style') loadStyle();
     if (v === 'admin') { loadAgents(); loadLog(); }
   }
   function applySession() {
@@ -186,6 +194,7 @@
     document.querySelectorAll('.admin-only').forEach(function (e) { e.classList.toggle('hidden', !admin); });
     document.querySelector('.navbtn[data-view="upload"]').classList.toggle('hidden', admin);
     document.querySelector('.navbtn[data-view="mine"]').classList.toggle('hidden', admin);
+    document.querySelector('.navbtn[data-view="style"]').classList.toggle('hidden', admin);
     show(admin ? 'admin' : 'upload');
   }
   function signOut() { session = null; save('mda_session', null); applySession(); }
@@ -202,7 +211,7 @@
       .then(function (j) {
         session = { token: j.token, display_name: j.display_name, admin: j.admin, expires: j.expires };
         save('mda_session', session); $('login-pass').value = ''; screechNext = true; applySession();
-        setTimeout(function () { if (screechNext) fly(); }, 600);   // first flyover (with screech) right after sign-in
+        setTimeout(function () { if (screechNext) fly({ force: true }); }, 600);   // first flyover (with screech) always plays
       })
       .catch(function (err) { $('login-err').textContent = err.message; })
       .then(function () { $('login-btn').disabled = false; });
@@ -252,7 +261,8 @@
     var status = function (t) { $('upload-status').textContent = t.toUpperCase().replace(/\.\.\.|…/g, ''); $('upload-status').classList.toggle('loading', /ING/.test(t.toUpperCase())); };
     var callId, ids = {};
     status('Starting…');
-    api({ action: 'startCall', note: $('note').value })
+    var mode = (document.querySelector('input[name="mode"]:checked') || {}).value || 'clips'; save('mda_mode', mode);
+    api({ action: 'startCall', note: $('note').value, mode: mode })
       .then(function (j) { callId = j.callId; status('Uploading video…'); return uploadOne('video', files.video, callId); })
       .then(function (id) { ids.video = id; $('drop-video').classList.add('done'); status('Uploading call recording…'); return uploadOne('audio', files.audio, callId); })
       .then(function (id) { ids.audio = id; $('drop-audio').classList.add('done'); status('Finishing…');
@@ -271,6 +281,10 @@
         $('upload-btn').disabled = false;
       });
   };
+  (function () { var m = load('mda_mode'); var r = m && document.querySelector('input[name="mode"][value="' + m + '"]'); if (r) r.checked = true; })();
+  document.querySelectorAll('input[name="mode"]').forEach(function (r) { r.onchange = function () {
+    $('upload-btn').innerHTML = '<span class="arr">▶</span> ' + (r.value === 'sync' ? 'UPLOAD + SYNC ONLY' : 'UPLOAD BOTH FILES') + ' <span class="arr">◀</span>';
+  }; });
   $('upload-again').onclick = function () {
     ['video', 'audio'].forEach(function (k) { setFile(k, null); setBar(k, 0, 0); $('drop-' + k).classList.remove('done'); $('file-' + k).value = ''; });
     $('note').value = ''; $('total-wrap').classList.add('hidden'); $('upload-status').textContent = '';
@@ -341,11 +355,56 @@
       $('my-folder').href = j.folder_url;
       if (!j.calls.length) { el.innerHTML = '<div class="empty">No uploads yet.</div>'; return; }
       el.innerHTML = j.calls.map(function (c) {
-        return '<div class="item"><div class="t">' + esc(fmtDate(c.uploaded_at)) + (c.note ? ' · ' + esc(c.note) : '') + '</div>' +
+        return '<div class="item"><div class="t">' + esc(fmtDate(c.uploaded_at)) + (c.note ? ' · ' + esc(c.note) : '') + (c.mode === 'sync' ? ' · <span class="tag">SYNC ONLY</span>' : '') + '</div>' +
           '<span class="pill ' + esc(c.status) + '">' + esc(c.status) + (c.status === 'Ready' && c.clips ? ' · ' + c.clips + ' clips' : '') + '</span>' +
           (c.problem ? '<div class="m">' + esc(c.problem) + '</div>' : '') + '</div>';
       }).join('');
     }).catch(function (err) { el.innerHTML = '<div class="err">' + esc(err.message) + '</div>'; });
+  }
+
+
+  // ---------------------------------------------------------------- my style
+  var STYLE_PRESETS = [
+    { name: 'MDA RED', font: 'Poppins', box: '#E01B2B', text: '#FFFFFF', hook_box: '#E01B2B', hook_text: '#FFFFFF', position: 'low' },
+    { name: 'GOLD RUSH', font: 'Bebas Neue', box: '#FFCC1A', text: '#1A1000', hook_box: '#1B3A9E', hook_text: '#FFCC1A', position: 'low' },
+    { name: 'MIDNIGHT', font: 'Montserrat', box: '#0B1F5C', text: '#FFFFFF', hook_box: '#4FD1FF', hook_text: '#0B1F5C', position: 'low' },
+    { name: 'CLEAN WHITE', font: 'Oswald', box: '#FFFFFF', text: '#111111', hook_box: '#111111', hook_text: '#FFFFFF', position: 'low' },
+    { name: 'COMIC', font: 'Bangers', box: '#FFE066', text: '#1A1000', hook_box: '#FF4D1C', hook_text: '#FFFFFF', position: 'mid' },
+    { name: 'HYPE', font: 'Anton', box: '#000000', text: '#4CE0A5', hook_box: '#4CE0A5', hook_text: '#000000', position: 'low' }
+  ];
+  var styleFonts = ['Poppins', 'Montserrat', 'Bebas Neue', 'Anton', 'Oswald', 'Bangers', 'Luckiest Guy'];
+  function readStyle() {
+    return { font: $('st-font').value, box: $('st-box').value.toUpperCase(), text: $('st-text').value.toUpperCase(),
+             hook_box: $('st-hook-box').value.toUpperCase(), hook_text: $('st-hook-text').value.toUpperCase(), position: $('st-pos').value };
+  }
+  function writeStyle(st) {
+    $('st-font').value = st.font; $('st-box').value = st.box; $('st-text').value = st.text;
+    $('st-hook-box').value = st.hook_box; $('st-hook-text').value = st.hook_text; $('st-pos').value = st.position; preview();
+  }
+  function preview() {
+    var st = readStyle(), cap = $('pv-cap'), hook = $('pv-hook');
+    cap.style.fontFamily = "'" + st.font + "', sans-serif"; cap.style.background = st.box; cap.style.color = st.text;
+    hook.style.fontFamily = "'" + st.font + "', sans-serif"; hook.style.background = st.hook_box; hook.style.color = st.hook_text;
+    cap.style.bottom = { low: '17%', mid: '27%', high: '40%' }[st.position];
+  }
+  function loadStyle() {
+    if (!$('st-font').options.length) {
+      styleFonts.forEach(function (f) { var o = document.createElement('option'); o.value = f; o.textContent = f; o.style.fontFamily = f; $('st-font').appendChild(o); });
+      STYLE_PRESETS.forEach(function (p) {
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'preset'; b.textContent = p.name;
+        b.style.background = p.box; b.style.color = p.text; b.style.fontFamily = "'" + p.font + "', sans-serif";
+        b.onclick = function () { writeStyle(p); }; $('presets').appendChild(b);
+      });
+      ['st-font', 'st-box', 'st-text', 'st-hook-box', 'st-hook-text', 'st-pos'].forEach(function (id) { $(id).oninput = preview; $(id).onchange = preview; });
+      $('st-save').onclick = function () {
+        $('st-err').textContent = ''; $('st-status').textContent = 'SAVING…'; $('st-save').disabled = true;
+        api({ action: 'setStyle', style: readStyle() }).then(function () { $('st-status').textContent = 'SAVED! Your next upload will use this style.'; blip(); })
+          .catch(function (e) { $('st-status').textContent = ''; $('st-err').textContent = e.message; }).then(function () { $('st-save').disabled = false; });
+      };
+    }
+    $('st-status').textContent = 'LOADING…';
+    api({ action: 'getStyle' }).then(function (j) { writeStyle(j.style); $('st-status').textContent = ''; })
+      .catch(function (e) { $('st-status').textContent = ''; $('st-err').textContent = e.message; });
   }
 
   // ---------------------------------------------------------------- admin
