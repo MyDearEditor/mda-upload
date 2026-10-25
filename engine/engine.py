@@ -108,6 +108,13 @@ def wav8k(src, dst):
     return x.astype(np.float32)
 
 
+def media_duration(path):
+    out = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path],
+                         capture_output=True, text=True).stdout.strip()
+    try: return float(out)
+    except ValueError: return 0.0
+
+
 def sync_offset(video, audio, tmp):
     """Returns (offset_seconds, confidence). Audio t=0 sits at video t=offset."""
     import scipy.signal as s
@@ -232,8 +239,19 @@ def process(call):
             api('engineProblem', callId=cid, notifyAgent=True, reason='The call recording was too short or too quiet to transcribe.')
             return
 
+        # only the part of the call that has video behind it (audio t = video t - offset)
+        vdur = media_duration(video)
+        a_min = max(0.0, -offset) + 0.5
+        a_max = vdur - offset - 0.5
+        usable = [sg for sg in transcript if sg['start'] >= a_min and sg['end'] <= a_max]
+        log.info('%s: video %.0fs, usable audio window %.1f-%.1f s, %d/%d segments', cid, vdur, a_min, a_max, len(usable), len(transcript))
+        if sum(len(sg['words']) for sg in usable) < 80:
+            api('engineProblem', callId=cid, notifyAgent=True, reason='The video and the call recording barely overlap. Please upload the video and recording of the same call.')
+            return
+
         log.info('%s: picking clips', cid)
-        clips, names, redactions = pick_clips(transcript, call.get('display_name', 'the agent'))
+        clips, names, redactions = pick_clips(usable, call.get('display_name', 'the agent'))
+        clips = [c for c in clips if float(c['start']) >= a_min and float(c['end']) <= a_max]
         cut_spans = redaction_spans(transcript, redactions)
         name_keys = sorted({_norm(n) for n in names if len(_norm(n)) >= 3})
         log.info('%s: %d clips, %d name keys, %d cut spans', cid, len(clips), len(name_keys), len(cut_spans))
@@ -262,6 +280,8 @@ def process(call):
             delivered.append(fid)
             log.info('%s: delivered "%s" (%.0fs, %d bleeps)', cid, hook, res['duration'], res['bleeps'])
 
+        for dmsg in dropped:
+            log.info('%s: dropped -> %s', cid, dmsg)
         if delivered:
             api('engineDone', callId=cid, clipFileIds=delivered, clipCount=len(delivered))
             log.info('%s: done, %d delivered, %d dropped', cid, len(delivered), len(dropped))

@@ -35,7 +35,7 @@ cat > /opt/mda/.env <<'EOF'
 MDA_API_URL=https://script.google.com/macros/s/AKfycbykCMfDGOVnsSxB3T-GQcQKHUbj_4-5hLVSbGFcB3UJVc-Gnd4gnp8Cw2_XN3rCKMrF/exec
 MDA_ENGINE_SECRET=PASTE_ME
 ANTHROPIC_API_KEY=PASTE_ME
-CLAUDE_MODEL=claude-sonnet-4-5
+CLAUDE_MODEL=claude-sonnet-5-5
 WHISPER_MODEL=small.en
 MDA_WORK_DIR=/opt/mda/work
 MDA_POLL_SECONDS=120
