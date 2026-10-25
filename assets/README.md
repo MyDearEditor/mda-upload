@@ -1,7 +1,9 @@
-# Theme assets
-Replace any of these files with your own art (keep the filenames, or update theme.css):
-- logo.svg        header logo / favicon (square)
-- backdrop.svg    large static art behind the page (any image; PNG/JPG fine — update the url() in theme.css)
-- speedlines.svg  tiling layer of speed lines (900x900, transparent background)
-- sparks.svg      tiling layer of floating particles (700x700, transparent background)
-Colors, fonts, radius and animation speeds are all variables at the top of theme.css.
+# Theme assets (pixel / anime-adventure theme)
+Replace any of these with your own exports (keep the filenames, or update theme.css):
+- scene.png        full scenery backdrop, 1920x1080 or larger, NO UI elements (currently the whole mockup as a stand-in)
+- scene-tall.png   portrait version for phones, 1080x1920 (optional; falls back to scene.png)
+- eagle.png        the eagle carrying a film clip, transparent PNG (keyed from the mockup for now)
+- wordmark.png     the title, transparent PNG
+- avatar.png       HUD portrait (square)
+- clouds.svg       repeating cloud layer that drifts across the sky (1200px wide, transparent)
+Colors, fonts and motion are variables at the top of theme.css.
