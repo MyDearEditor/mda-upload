@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My Dear Academy — Upload</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="theme.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="backdrop" aria-hidden="true">
+  <div class="aura aura-1"></div><div class="aura aura-2"></div>
+  <div class="speedlines"></div>
+  <div class="sparks"></div>
+</div>
+
+<header class="top">
+  <a class="brand" href="#"><img src="assets/logo.svg" alt="" class="logo"><span>My Dear Academy</span></a>
+  <nav id="nav" class="nav hidden">
+    <button data-view="upload" class="navbtn active">Upload a call</button>
+    <button data-view="mine" class="navbtn">My uploads</button>
+    <button data-view="admin" class="navbtn admin-only hidden">Admin</button>
+    <span class="who" id="who"></span>
+    <button id="logout" class="navbtn ghost">Sign out</button>
+  </nav>
+</header>
+
+<main class="wrap">
+
+  <!-- ============ SIGN IN ============ -->
+  <section id="view-login" class="view card">
+    <h1 class="title">Power up.<br><span class="accent">Upload your call.</span></h1>
+    <p class="sub">Sign in with the username and password you were given.</p>
+    <form id="login-form" autocomplete="on">
+      <label>Username<input id="login-user" name="username" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
+      <label>Password<input id="login-pass" name="password" type="password" required></label>
+      <button class="btn primary" type="submit" id="login-btn">Sign in</button>
+      <p class="err" id="login-err"></p>
+    </form>
+  </section>
+
+  <!-- ============ UPLOAD ============ -->
+  <section id="view-upload" class="view hidden">
+    <div class="card">
+      <h2>Upload a call</h2>
+      <p class="sub">Both files are required. Keep this page open until it says <b>done</b>.</p>
+      <div class="notice">
+        <b>Film only yourself.</b> No computer screens, quote tools, CRM, or paperwork in the shot.
+      </div>
+      <div class="drops">
+        <div class="drop" id="drop-video" data-kind="video">
+          <input type="file" id="file-video" accept="video/mp4,video/quicktime,.mp4,.mov" hidden>
+          <div class="drop-icon">🎥</div>
+          <div class="drop-label">Phone video</div>
+          <div class="drop-hint">mp4 or mov · tap to choose</div>
+          <div class="drop-file" id="name-video"></div>
+          <div class="bar"><div class="fill" id="bar-video"></div></div>
+          <div class="pct" id="pct-video"></div>
+        </div>
+        <div class="drop" id="drop-audio" data-kind="audio">
+          <input type="file" id="file-audio" accept="audio/*,.mp3,.wav,.m4a" hidden>
+          <div class="drop-icon">🎧</div>
+          <div class="drop-label">Call recording</div>
+          <div class="drop-hint">mp3, wav or m4a · tap to choose</div>
+          <div class="drop-file" id="name-audio"></div>
+          <div class="bar"><div class="fill" id="bar-audio"></div></div>
+          <div class="pct" id="pct-audio"></div>
+        </div>
+      </div>
+      <label>Note (optional)<input id="note" maxlength="200" placeholder="e.g. Lead from Facebook, closed on the 2nd call"></label>
+      <button class="btn primary big" id="upload-btn" disabled>Upload both files</button>
+      <p class="status" id="upload-status"></p>
+      <p class="err" id="upload-err"></p>
+    </div>
+    <div class="card done hidden" id="upload-done">
+      <div class="done-icon">⚡</div>
+      <h2>Got it!</h2>
+      <p>Your clips will be ready in about an hour. We'll text and email you.</p>
+      <button class="btn" id="upload-again">Upload another call</button>
+    </div>
+  </section>
+
+  <!-- ============ MY UPLOADS ============ -->
+  <section id="view-mine" class="view card hidden">
+    <div class="row"><h2>My uploads</h2><a class="btn small" id="my-folder" target="_blank" rel="noopener">Open my clips folder ↗</a></div>
+    <div id="mine-list" class="list"></div>
+  </section>
+
+  <!-- ============ ADMIN ============ -->
+  <section id="view-admin" class="view hidden">
+    <div class="card">
+      <h2>Add an agent</h2>
+      <form id="add-form" class="grid2" autocomplete="off">
+        <label>Username<input name="username" required pattern="[a-z0-9_.\-]{2,30}" autocapitalize="none"></label>
+        <label>Password <small>(8+ chars)</small><input name="password" required minlength="8"></label>
+        <label>Display name<input name="display_name" required placeholder="Quinton Smith"></label>
+        <label>LFL email<input name="email" type="email" required placeholder="name@legacyfamilylife.com"></label>
+        <label>Mobile<input name="mobile" placeholder="(407) 555-0100"></label>
+        <label>Drive folder link <small>(blank = create &amp; share one)</small><input name="folder_link"></label>
+        <button class="btn primary" type="submit">Add agent</button>
+        <p class="err" id="add-err"></p><p class="status" id="add-ok"></p>
+      </form>
+    </div>
+    <div class="card">
+      <div class="row"><h2>Agents</h2><button class="btn small" id="reload-agents">Refresh</button></div>
+      <div id="agents" class="list"></div>
+    </div>
+    <div class="card">
+      <div class="row"><h2>Recent uploads</h2><button class="btn small" id="reload-log">Refresh</button></div>
+      <div id="log" class="list"></div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">Legacy Family Life · My Dear Academy</footer>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

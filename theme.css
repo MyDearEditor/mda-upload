@@ -1,0 +1,37 @@
+/* =====================================================================
+   THEME — the only file (plus /assets) you need to touch for design rounds.
+   Everything below is a variable the layout in style.css reads.
+   ===================================================================== */
+:root {
+  /* brand colors */
+  --bg:            #07070f;      /* page background */
+  --bg-2:          #11091c;      /* second backdrop tone */
+  --card:          rgba(16, 14, 28, 0.82);
+  --card-border:   rgba(255, 255, 255, 0.08);
+  --text:          #f4f1ff;
+  --muted:         #a9a3c2;
+  --accent:        #ffb400;      /* gold — buttons, highlights, the "ki" glow */
+  --accent-2:      #ff4d1c;      /* orange-red — gradients, hot edges */
+  --accent-3:      #4fd1ff;      /* electric blue — secondary aura */
+  --danger:        #ff4d6d;
+  --ok:            #4ce0a5;
+
+  /* type */
+  --font:          'Poppins', system-ui, sans-serif;
+  --title-weight:  900;
+
+  /* shape */
+  --radius:        22px;
+  --radius-sm:     12px;
+  --glow:          0 0 24px rgba(255, 180, 0, 0.45), 0 0 60px rgba(255, 77, 28, 0.25);
+
+  /* backdrop art (swap these files in /assets) */
+  --art-backdrop:  url("assets/backdrop.svg");   /* big static art behind everything */
+  --art-speedlines:url("assets/speedlines.svg"); /* repeating speed-line layer */
+  --art-sparks:    url("assets/sparks.svg");     /* floating particle layer */
+
+  /* motion (set to 0s to freeze) */
+  --aura-speed:    6s;
+  --lines-speed:   14s;
+  --sparks-speed:  22s;
+}
