@@ -487,8 +487,16 @@
         var st = { started: 'Uploading', uploaded: 'Uploaded', editing: 'Editing', ready: 'Ready', problem: 'Problem' }[r.status] || r.status;
         return '<div class="item"><div><div class="t">' + esc(r.username) + ' · ' + esc(fmtDate(r.uploaded_at)) + '</div>' +
           '<div class="m">' + esc(r.call_id) + ' · video ' + (r.video_MB || 0) + ' MB · audio ' + (r.audio_MB || 0) + ' MB' + (r.note ? ' · ' + esc(r.note) : '') +
-          (r.problem ? ' · ' + esc(r.problem) : '') + '</div></div><span class="pill ' + esc(st) + '">' + esc(st) + (r.clips_delivered ? ' · ' + r.clips_delivered + ' clips' : '') + '</span></div>';
+          (r.problem ? ' · ' + esc(r.problem) : '') + '</div></div><span class="pill ' + esc(st) + '">' + esc(st) + (r.clips_delivered ? ' · ' + r.clips_delivered + ' clips' : '') + '</span>' +
+          (r.status === 'problem' ? '<button class="btn small" data-retry="' + esc(r.call_id) + '">RETRY</button>' : '') + '</div>';
       }).join('');
+      el.querySelectorAll('button[data-retry]').forEach(function (btn) {
+        btn.onclick = function () {
+          btn.disabled = true; btn.textContent = 'QUEUED…';
+          api({ action: 'adminRequeue', callId: btn.dataset.retry }).then(function () { loadLog(); loadStats(); })
+            .catch(function (e) { window.alert(e.message); btn.disabled = false; btn.textContent = 'RETRY'; });
+        };
+      });
     }).catch(function (err) { el.innerHTML = '<div class="err">' + esc(err.message) + '</div>'; });
   }
 
