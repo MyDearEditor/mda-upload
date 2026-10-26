@@ -147,7 +147,9 @@ def transcribe(audio, out_json, t0=0.0, t1=None):
     if t1 is not None: cmd += ['-t', f'{max(0.0, t1 - t0):.3f}']
     raw = subprocess.run(cmd + ['-i', audio, '-ac', '1', '-ar', '16000', '-f', 'f32le', '-'], capture_output=True, check=True).stdout
     arr = np.frombuffer(raw, np.float32)
-    segs, _ = m.transcribe(arr, language='en', word_timestamps=True, vad_filter=False, beam_size=5)
+    # the initial_prompt nudges Whisper to transcribe disfluencies verbatim so the renderer can cut them
+    segs, _ = m.transcribe(arr, language='en', word_timestamps=True, vad_filter=False, beam_size=5,
+                           initial_prompt="So, um, yeah, like, you know, I mean, uh, let me think.")
     out = []
     for sg in segs:
         if not sg.words: continue
@@ -294,7 +296,7 @@ def process(call):
             try:
                 res = render({'video': video, 'audio': audio, 'offset': offset, 'transcript': tpath,
                               'start': float(c['start']), 'end': float(c['end']), 'hook': hook, 'out': out,
-                              'bleep_words': name_keys, 'cut_spans': cut_spans, 'gap_max': 0.6, 'gap_pad': 0.2, 'style': style})
+                              'bleep_words': name_keys, 'cut_spans': cut_spans, 'gap_max': 0.5, 'gap_pad': 0.15, 'style': style})
             except Exception as ex:
                 log.warning('%s: clip %d render failed: %s', cid, i, ex); dropped.append(f'{hook}: render failed'); continue
             if not 20 <= res['duration'] <= 75:

@@ -9,7 +9,8 @@ config keys:
   out                     output mp4 path
   bleep_words             lowercase name fragments: first mention in the clip is bleeped, later mentions are cut
   cut_spans               [[s,e],...] audio-time spans whose words are removed entirely
-  gap_max, gap_pad        dead-air trimming (default 0.6 / 0.2)
+  gap_max, gap_pad        dead-air trimming (default 0.5 / 0.15)
+  cut_fillers             remove um/uh, stutters, and clearly-filler "like" / "you know" (default True)
 Returns {"out", "duration", "caption_text", "bleeps", "cuts"}.
 """
 import json, sys, subprocess, re, os, tempfile, shutil
@@ -28,6 +29,54 @@ def _pcm(path, start, dur, sr):
 
 def _clean(s):
     return re.sub(r"[^\w'%$-]", '', s).upper()
+
+
+FILLERS = {'um', 'uh', 'uhm', 'umm', 'uhh', 'er', 'erm', 'ah', 'ahh', 'hmm', 'hm', 'mhm', 'mmhmm', 'mm'}
+# "like" right after one of these is almost always meaningful ("would like", "looks like", "I like") — keep it
+LIKE_SAFE_BEFORE = {'would', 'wouldnt', 'd', 'id', 'youd', 'wed', 'theyd', 'shed', 'hed', 'i', 'you', 'we', 'they',
+                    'she', 'he', 'people', 'dont', 'didnt', 'much', 'just', 'really', 'anything', 'something',
+                    'nothing', 'things', 'stuff', 'feel', 'feels', 'felt', 'look', 'looks', 'looked', 'looking',
+                    'seem', 'seems', 'seemed', 'sound', 'sounds', 'sounded', 'is', 'was', 'be', 'more', 'kind', 'sort'}
+
+
+def _wkey(w):
+    return re.sub(r"[^a-z]", '', w.lower())
+
+
+def _mark_fillers(words):
+    """Mark filler words as cut: um/uh always; back-to-back stutters; 'like' and 'you know' only when they
+    read as hedges (a pause or comma on a side) so meaningful uses survive."""
+    for i, w in enumerate(words):
+        if w['cut'] or w['bleep']:
+            continue
+        t = _wkey(w['w'])
+        prev = words[i - 1] if i else None
+        nxt = words[i + 1] if i + 1 < len(words) else None
+        if t in FILLERS:
+            w['cut'] = True
+            continue
+        # stutter: the same word twice in a row with no real pause ("I I think", "the the") — drop the first
+        if (nxt is not None and t and _wkey(nxt['w']) == t and not nxt['cut']
+                and nxt['s'] - w['e'] < 0.35 and not re.search(r'[.?!]$', w['w'].strip())):
+            w['cut'] = True
+            continue
+        prev_t = _wkey(prev['w']) if prev else ''
+        prev_comma = bool(prev) and bool(re.search(r'[,–—]$', prev['w'].strip()))
+        if t == 'like':
+            pause_before = prev is None or w['s'] - prev['e'] > 0.28 or prev_comma
+            pause_after = nxt is None or nxt['s'] - w['e'] > 0.28 or bool(re.search(r',$', w['w'].strip()))
+            # bracketed on both sides it is a hedge no matter what came before; one-sided only when
+            # the previous word doesn't make it meaningful ("would like", "looks like", "I like")
+            if (pause_before and pause_after) or (prev_t not in LIKE_SAFE_BEFORE and (pause_before or pause_after)):
+                w['cut'] = True
+                continue
+        # parenthetical "you know": pauses or commas around the pair
+        if t == 'you' and nxt is not None and _wkey(nxt['w']) == 'know' and not nxt['cut']:
+            after = words[i + 2] if i + 2 < len(words) else None
+            pb = prev is None or w['s'] - prev['e'] > 0.25 or prev_comma
+            pa = after is None or after['s'] - nxt['e'] > 0.25 or re.search(r'[,.?!]$', nxt['w'].strip())
+            if pb and pa:
+                w['cut'] = nxt['cut'] = True
 
 
 def _ts(t):
@@ -67,8 +116,12 @@ def _render(cfg, out_path, tmp):
             if seen: w['cut'] = True
             else: w['bleep'] = seen = True
 
+    # ---- filler words: cut them like redactions so audio, video and captions all skip them
+    if cfg.get('cut_fillers', True):
+        _mark_fillers(words)
+
     # ---- keep-segments: trim dead air and drop cut words
-    gap_max, pad = cfg.get('gap_max', 0.6), cfg.get('gap_pad', 0.2)
+    gap_max, pad = cfg.get('gap_max', 0.5), cfg.get('gap_pad', 0.15)
     kept = [w for w in words if not w['cut']]
     if len(kept) < 5:
         raise ValueError('clip has too few words left after redaction')
