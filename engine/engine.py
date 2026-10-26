@@ -100,6 +100,29 @@ def drive_upload(path, name, parent_id, mime):
     raise RuntimeError('upload ended without a file id')
 
 
+def drive_mkdir(name, parent_id):
+    """Create a subfolder under parent_id and return its id."""
+    r = requests.post('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true',
+                      headers={'Authorization': 'Bearer ' + TOKEN.get(), 'Content-Type': 'application/json; charset=UTF-8'},
+                      data=json.dumps({'name': name, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [parent_id]}),
+                      timeout=60)
+    r.raise_for_status()
+    return r.json()['id']
+
+
+def call_folder_name(call):
+    """A clear, unique, sortable name for this call's delivery subfolder, e.g. '2026-10-26 1430 - price objection'."""
+    at = str(call.get('uploaded_at', ''))
+    date = at[:10] or datetime.date.today().isoformat()
+    hhmm = (at[11:13] + at[14:16]) if len(at) >= 16 else ''
+    note = re.sub(r'[\\/:*?"<>|]', ' ', str(call.get('note', '') or '')).strip()
+    note = re.sub(r'\s+', ' ', note)[:40].strip()
+    label = (date + (' ' + hhmm if hhmm else '')).strip()
+    if note:
+        label += ' - ' + note
+    return label or call.get('call_id', 'Call')
+
+
 # ---------------------------------------------------------------- media
 def wav8k(src, dst):
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', src, '-ac', '1', '-ar', '8000', '-vn', dst], check=True)
@@ -261,16 +284,24 @@ def process(call):
         date = str(call.get('uploaded_at', ''))[:10] or datetime.date.today().isoformat()
         delivered, dropped = [], []
 
+        # each upload gets its OWN subfolder inside the agent's folder, so two calls never pile into one place
+        try:
+            dest = drive_mkdir(call_folder_name(call), call['agent_folder_id'])
+            log.info('%s: delivering into subfolder "%s"', cid, call_folder_name(call))
+        except Exception as ex:
+            log.warning('%s: could not create call subfolder (%s); delivering to the main folder', cid, ex)
+            dest = call['agent_folder_id']
+
         # always deliver the full synced video (original quality, clean call audio) so agents can edit themselves
         try:
             full = synced_full_video(video, audio, offset, a_min, a_max, os.path.join(d, 'out', 'full.mp4'))
-            fid_full = drive_upload(full, f'{date} - Full call (synced audio).mp4', call['agent_folder_id'], 'video/mp4')
+            fid_full = drive_upload(full, f'{date} - Full call (synced audio).mp4', dest, 'video/mp4')
             log.info('%s: delivered full synced video (%.0fs)', cid, a_max - a_min)
         except Exception as ex:
             log.warning('%s: full synced video failed: %s', cid, ex); fid_full = None
         if mode == 'sync':
             if fid_full:
-                api('engineDone', callId=cid, clipFileIds=[], clipCount=0)
+                api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest)
             else:
                 api('engineProblem', callId=cid, reason='Could not build the synced full video.')
             return
@@ -305,20 +336,20 @@ def process(call):
             if chk.get('flagged') or chk.get('unsure'):
                 dropped.append(f'{hook}: compliance ({", ".join(map(str, chk.get("items", [])))[:200]})'); continue
             name = f'{date} - {hook}'
-            fid = drive_upload(out, name + '.mp4', call['agent_folder_id'], 'video/mp4')
+            fid = drive_upload(out, name + '.mp4', dest, 'video/mp4')
             txt = os.path.join(d, 'out', f'clip{i}.txt')
             open(txt, 'w').write(str(c.get('ig_caption', '')).strip() + '\n')
-            drive_upload(txt, name + '.txt', call['agent_folder_id'], 'text/plain')
+            drive_upload(txt, name + '.txt', dest, 'text/plain')
             delivered.append(fid)
             log.info('%s: delivered "%s" (%.0fs, %d bleeps)', cid, hook, res['duration'], res['bleeps'])
 
         for dmsg in dropped:
             log.info('%s: dropped -> %s', cid, dmsg)
         if delivered:
-            api('engineDone', callId=cid, clipFileIds=delivered, clipCount=len(delivered))
+            api('engineDone', callId=cid, clipFileIds=delivered, clipCount=len(delivered), folderId=dest)
             log.info('%s: done, %d delivered, %d dropped', cid, len(delivered), len(dropped))
         elif fid_full:
-            api('engineDone', callId=cid, clipFileIds=[], clipCount=0)
+            api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest)
             log.info('%s: no clip passed; full synced video delivered', cid)
         else:
             api('engineProblem', callId=cid, reason='No clip passed the compliance check.\n' + '\n'.join(dropped))
