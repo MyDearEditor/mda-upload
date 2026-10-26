@@ -148,18 +148,65 @@ def media_duration(path):
     except ValueError: return 0.0
 
 
+def _envelope(x, hop=160):
+    """Loudness envelope, one point per 20 ms: robust to telephony filtering and weak phone-mic pickup."""
+    n = len(x) // hop * hop
+    if n == 0:
+        return np.zeros(1, np.float64)
+    e = np.sqrt((x[:n].astype(np.float64) ** 2).reshape(-1, hop).mean(axis=1))
+    e = np.log1p(e * 300.0)
+    return e - e.mean()
+
+
 def sync_offset(video, audio, tmp):
-    """Returns (offset_seconds, confidence). Audio t=0 sits at video t=offset."""
+    """Returns (offset_seconds, confidence, detail). Audio t=0 sits at video t=offset.
+    Whole-file envelope correlation (no 6-minute cap, works with long pre-roll and headphone calls),
+    gated by an agreement check: the first and second halves of the call recording must independently
+    land on the same offset. Then a sample-accurate refine on raw audio."""
     import scipy.signal as s
+    HOP = 160                                     # 20 ms at 8 kHz
     v = wav8k(video, os.path.join(tmp, 'v.wav'))
     a = wav8k(audio, os.path.join(tmp, 'a.wav'))
-    # correlate on at most the first 6 minutes of each to keep memory sane; offsets rarely exceed that
-    N = 8000 * 360
-    v, a = v[:N], a[:N]
-    c = s.correlate(v - v.mean(), a - a.mean(), mode='full', method='fft')
-    offset = (np.argmax(c) - (len(a) - 1)) / 8000
-    conf = float(c.max() / (np.std(c) + 1e-9))
-    return float(offset), conf
+    v_rms = float(np.sqrt(np.mean(v.astype(np.float64) ** 2)))
+    a_rms = float(np.sqrt(np.mean(a.astype(np.float64) ** 2)))
+    if v_rms < 1.0:
+        return 0.0, 0.0, 'video has no usable audio track'
+    if a_rms < 1.0:
+        return 0.0, 0.0, 'call recording is silent'
+
+    ev, ea = _envelope(v, HOP), _envelope(a, HOP)
+    c = s.correlate(ev, ea, mode='full', method='fft')
+    k = int(np.argmax(c))
+    lag = k - (len(ea) - 1)
+    peak_z = float((c[k] - np.median(c)) / (np.std(c) + 1e-9))
+
+    # agreement: each half of the call recording, matched on its own, must land on the same offset
+    half = len(ea) // 2
+    implied = []
+    for h0, seg in ((0, ea[:half]), (half, ea[half:])):
+        seg = seg - seg.mean()
+        if len(seg) < 1500:                       # need at least ~30 s per half
+            continue
+        cs = s.correlate(ev, seg, mode='full', method='fft')
+        implied.append((int(np.argmax(cs)) - (len(seg) - 1)) - h0)
+    agree = len(implied) == 2 and abs(implied[0] - implied[1]) * HOP / 8000.0 <= 0.35
+    detail = 'halves agree' if agree else ('halves disagree: ' + ', '.join(f'{i * HOP / 8000.0:+.1f}s' for i in implied))
+
+    off = lag * HOP / 8000.0
+    # sample-accurate refine on a 20 s window in the middle of the overlap
+    adur, vdur = len(a) / 8000.0, len(v) / 8000.0
+    o0, o1 = max(0.0, -off), min(adur, vdur - off)
+    if o1 - o0 > 12:
+        W = min(20.0, o1 - o0 - 4)
+        ta = max(o0 + 1, (o0 + o1) / 2 - W / 2)
+        ca = a[int(ta * 8000):int((ta + W) * 8000)].astype(np.float64)
+        tv0 = max(0.0, ta + off - 1.0)
+        va = v[int(tv0 * 8000):int((tv0 + W + 2.0) * 8000)].astype(np.float64)
+        if len(va) > len(ca) > 8000 * 4:
+            cc = s.correlate(va - va.mean(), ca - ca.mean(), mode='valid')
+            off = (tv0 + float(np.argmax(cc)) / 8000.0) - ta
+    conf = peak_z if agree else 0.0
+    return float(off), conf, f'peak {peak_z:.1f}, {detail}'
 
 
 def transcribe(audio, out_json, t0=0.0, t1=None):
@@ -262,11 +309,14 @@ def process(call):
         audio = drive_download(call['audio_id'], os.path.join(d, 'call.mp3'))
 
         log.info('%s: syncing', cid)
-        offset, conf = sync_offset(video, audio, d)
-        log.info('%s: offset %.3f confidence %.1f', cid, offset, conf)
+        offset, conf, detail = sync_offset(video, audio, d)
+        log.info('%s: offset %.3f confidence %.1f (%s)', cid, offset, conf, detail)
         if conf < MIN_SYNC_CONFIDENCE:
-            api('engineProblem', callId=cid, notifyAgent=True,
-                reason=f'The call recording did not match the phone video (sync confidence {conf:.1f}). Please re-upload the matching pair.')
+            if 'no usable audio' in detail or 'is silent' in detail:
+                reason = f'Your {"phone video has no usable audio track" if "video" in detail else "call recording is silent"}. We need sound in both files to line them up — please check the recording and upload again.'
+            else:
+                reason = f'The call recording did not match the phone video (sync {detail}). Please re-upload the matching pair.'
+            api('engineProblem', callId=cid, notifyAgent=True, reason=reason)
             return
 
         # RULE: edit only where there is video. Audio t = video t - offset, so the usable call window is:
