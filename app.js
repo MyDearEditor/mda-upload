@@ -176,7 +176,7 @@
     document.querySelectorAll('.navbtn[data-view]').forEach(function (b) { b.classList.toggle('active', b.dataset.view === v); });
     if (v === 'mine') loadMine();
     if (v === 'style') loadStyle();
-    if (v === 'admin') { loadAgents(); loadLog(); }
+    if (v === 'admin') { loadStats(); loadAgents(); loadLog(); }
   }
   function applySession() {
     var on = !!(session && session.expires > Date.now());
@@ -420,6 +420,37 @@
   };
   $('reload-agents').onclick = loadAgents;
   $('reload-log').onclick = loadLog;
+
+  var statsPeriod = 'all';
+  document.querySelectorAll('#stats-seg .btn').forEach(function (b) {
+    b.onclick = function () {
+      statsPeriod = b.dataset.period;
+      document.querySelectorAll('#stats-seg .btn').forEach(function (x) { x.classList.toggle('active', x === b); });
+      loadStats();
+    };
+  });
+  function loadStats() {
+    var tiles = $('stats-tiles'), list = $('stats-agents');
+    tiles.innerHTML = '<div class="empty">Loading…</div>'; list.innerHTML = '';
+    api({ action: 'adminStats', period: statsPeriod }).then(function (j) {
+      var t = j.totals;
+      var gb = t.video_mb >= 1024 ? (t.video_mb / 1024).toFixed(1) + ' GB' : Math.round(t.video_mb) + ' MB';
+      tiles.innerHTML =
+        tile(t.calls, 'CALLS UPLOADED') + tile(t.clips, 'CLIPS CREATED') + tile(t.ready, 'READY') +
+        tile(t.working, 'WORKING') + tile(t.problems, 'PROBLEMS', t.problems > 0) + tile(gb, 'VIDEO UPLOADED');
+      if (!j.agents.length) { list.innerHTML = '<div class="empty">No uploads ' + ({ day: 'today', week: 'in the last 7 days', month: 'in the last 30 days', all: 'yet' }[j.period] || '') + '.</div>'; return; }
+      var max = Math.max.apply(null, j.agents.map(function (a) { return a.calls; }));
+      list.innerHTML = j.agents.map(function (a) {
+        return '<div class="item"><div style="flex:1"><div class="t">' + esc(a.display_name) + ' <span class="pill">' + esc(a.username) + '</span></div>' +
+          '<div class="m">' + a.calls + ' call' + (a.calls === 1 ? '' : 's') + ' · ' + a.clips + ' clip' + (a.clips === 1 ? '' : 's') +
+          (a.sync ? ' · ' + a.sync + ' sync-only' : '') + (a.working ? ' · ' + a.working + ' working' : '') +
+          (a.problems ? ' · ' + a.problems + ' problem' + (a.problems === 1 ? '' : 's') : '') +
+          ' · last upload ' + esc(fmtDate(a.last_upload) || '—') + '</div>' +
+          '<div class="ubar"><i style="width:' + Math.max(4, Math.round(a.calls / max * 100)) + '%"></i></div></div></div>';
+      }).join('');
+    }).catch(function (err) { tiles.innerHTML = '<div class="err">' + esc(err.message) + '</div>'; });
+  }
+  function tile(n, label, warn) { return '<div class="tile' + (warn ? ' warn' : '') + '"><div class="n">' + n + '</div><div class="l">' + label + '</div></div>'; }
 
   function loadAgents() {
     var el = $('agents'); el.innerHTML = '<div class="empty">Loading…</div>';

@@ -200,6 +200,20 @@
   <!-- ============ ADMIN ============ -->
   <section id="view-admin" class="view hidden">
     <div class="panel glass">
+      <div class="row">
+        <div class="panel-title">▶ USAGE</div>
+        <div class="seg" id="stats-seg">
+          <button class="btn small" data-period="day">TODAY</button>
+          <button class="btn small" data-period="week">7 DAYS</button>
+          <button class="btn small" data-period="month">30 DAYS</button>
+          <button class="btn small active" data-period="all">ALL TIME</button>
+        </div>
+      </div>
+      <div id="stats-tiles" class="tiles"></div>
+      <div id="stats-agents" class="list"></div>
+      <p class="m stats-note">“Working” = uploaded or editing right now. Downloads aren’t something Google Drive reports for shared files, so “clips delivered” is the closest true number.</p>
+    </div>
+    <div class="panel glass">
       <div class="panel-title">▶ ADD AN AGENT</div>
       <form id="add-form" class="grid2" autocomplete="off">
         <label>USERNAME <small>(login handle, not an email: lowercase letters, numbers, dots, dashes — e.g. chloe.fox)</small><input name="username" required pattern="[a-z0-9_.\-]{2,30}" autocapitalize="none" title="2-30 characters: lowercase letters, numbers, dots, dashes or underscores. No @ or spaces." placeholder="chloe.fox"></label>

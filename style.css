@@ -273,3 +273,15 @@ input[type="color"] { height: 48px; padding: 4px; cursor: pointer; }
 .pv-hook, .pv-cap { position: absolute; left: 10%; right: 10%; text-align: center; font-weight: 800; line-height: 1.15; padding: 7px 8px; font-size: 13px; text-transform: uppercase; }
 .pv-hook { top: 9%; }
 .pv-cap { bottom: 17%; transition: bottom .25s; }
+
+/* ---------- admin usage dashboard ---------- */
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg .btn.active { color: #2a1200; background: linear-gradient(180deg, #ffe066 0%, var(--gold) 50%, var(--gold-2) 100%); border-color: #fff2a8; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 12px 0 14px; }
+.tile { background: rgba(11,31,92,.55); border: var(--pixel) solid var(--border); padding: 12px 10px; text-align: center; }
+.tile .n { font-family: var(--font-pixel); font-size: 22px; color: var(--gold); text-shadow: 2px 2px 0 var(--border-dark); }
+.tile .l { font-family: var(--font-pixel); font-size: 7px; letter-spacing: 1px; color: var(--text-dim); margin-top: 7px; }
+.tile.warn .n { color: #ff6b6b; }
+.stats-note { font-size: 13px; color: var(--text-dim); margin: 10px 2px 0; line-height: 1.4; }
+.ubar { position: relative; height: 10px; background: rgba(0,0,0,.35); border: 1px solid var(--border); margin-top: 6px; max-width: 420px; }
+.ubar i { position: absolute; inset: 0 auto 0 0; background: repeating-linear-gradient(90deg, var(--gold) 0 8px, var(--gold-2) 8px 16px); }
