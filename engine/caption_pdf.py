@@ -98,7 +98,7 @@ def _plain(s, limit=1200):
     return s[:limit]
 
 
-def _edit_notes(edits, duration):
+def _edit_notes(edits, duration, zoom_note=""):
     """Plain-language bullets built from what the renderer actually did. No claims we can't back up."""
     e = edits or {}
     picked = float(e.get('picked') or 0)
@@ -125,8 +125,14 @@ def _edit_notes(edits, duration):
     if e.get('redacted'):
         notes.append('Cut the parts compliance does not allow in a public clip - carrier names, personal '
                      'details, locations and money details.')
+    if e.get('zooms'):
+        n = e['zooms']
+        notes.append('Pushed in %d %s while you were the one talking, and pulled back out for the client. '
+                     'Movement is what keeps a viewer on a Reel.' % (n, 'time' if n == 1 else 'times'))
     notes.append('Captions are burned in from the words actually spoken, so it reads with the sound off.')
     notes.append('The finished clip was checked a second time for compliance before it was delivered.')
+    if zoom_note:
+        notes.append(zoom_note)
     return notes
 
 
@@ -257,7 +263,7 @@ def _build(cfg, out, tmp):
         y -= h + 14
 
     bullet = ParagraphStyle('b', fontName=F['body'], fontSize=10, leading=14, textColor=MUTED)
-    for note in _edit_notes(cfg.get('edits'), duration):
+    for note in _edit_notes(cfg.get('edits'), duration, _plain(cfg.get('zoom_note') or '', 400)):
         pb = Paragraph(_plain(note, 300), bullet)
         _, h = pb.wrap(body_w - 16, 80)
         if y - h < 92:

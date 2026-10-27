@@ -22,6 +22,37 @@ FPS = 30
 RED = '&H002B1BE0'   # BGR for #E01B2B
 BLEEP_LEVEL = 0.175  # 30% quieter than the original 0.25 - audible, not startling
 HOOK_SECONDS = 8.0   # the banner lands and leaves; it is a hook, not a watermark
+ZOOM_MAX = 1.20      # how far in to push while the agent is talking
+ZOOM_EASE = 0.35     # seconds to ride in and out, so it reads as a move rather than a jump
+ZOOM_MIN_TURN = 0.8  # ignore turns too short to be worth a move
+ZOOM_JOIN = 0.5      # merge agent turns separated by less than this
+ZOOM_MAX_TURNS = 40  # keep the filter expression to a sane length
+
+
+def _zoom_expr(turns, total):
+    """ffmpeg zoompan z-expression: 1.0 by default, easing up to ZOOM_MAX while the agent speaks.
+
+    turns are (start, end) in OUTPUT time. zoompan has no t variable, but output fps is fixed, so
+    time is on/FPS. Commas inside the expression are escaped because the filtergraph splits on them.
+    """
+    merged = []
+    for s, e in sorted(turns):
+        s, e = max(0.0, float(s)), min(float(total), float(e))
+        if e - s < ZOOM_MIN_TURN:
+            continue
+        if merged and s - merged[-1][1] < ZOOM_JOIN:
+            merged[-1][1] = e
+        else:
+            merged.append([s, e])
+    merged = [m for m in merged if m[1] - m[0] >= ZOOM_MIN_TURN][:ZOOM_MAX_TURNS]
+    if not merged:
+        return None, 0
+    T = f'(on/{FPS})'
+    parts = []
+    for s, e in merged:
+        parts.append(f'between({T}\\,{s:.2f}\\,{e:.2f})*'
+                     f'max(0\\,min(1\\,min(({T}-{s:.2f})/{ZOOM_EASE}\\,({e:.2f}-{T})/{ZOOM_EASE})))')
+    return f'1+{ZOOM_MAX - 1:.3f}*({"+".join(parts)})', len(merged)
 
 
 def _pcm(path, start, dur, sr):
@@ -330,9 +361,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     V0 = A0 + off
     vsel = '+'.join(f"gte(t\\,{s-A0-0.5/FPS:.4f})*lt(t\\,{e-A0-0.5/FPS:.4f})" for s, e in segs)
     ass_esc = ass_path.replace('\\', '/').replace(':', '\\:')
+    # optional push-in while the agent is talking: agent turns arrive in audio time, map them to output time
+    zexpr, zturns = None, 0
+    if cfg.get('zoom_turns'):
+        zexpr, zturns = _zoom_expr([(to_out(s), to_out(e)) for s, e in cfg['zoom_turns']], total)
+    zoom_filter = ('' if not zexpr else
+                   f",zoompan=z='{zexpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps={FPS}")
+
     fc = [f"[0:v]fps={FPS},select='{vsel}',setpts=N/{FPS}/TB[vc]",
           "[1:a]anull[ac]",
-          f"[vc]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,ass={ass_esc}[vo]",
+          f"[vc]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
+          f"{zoom_filter},setsar=1,ass={ass_esc}[vo]",
           "[ac]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[ao]"]
     cmd = ['ffmpeg', '-v', 'error', '-y', '-ss', f'{V0:.3f}', '-t', f'{A1-A0+0.5:.3f}', '-i', cfg['video'],
            '-f', 'f32le', '-ar', str(SR), '-ac', '1', '-i', bleeped,
@@ -345,7 +384,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             'bleeps': sum(w['bleep'] for w in words), 'cuts': len(segs) - 1,
             'picked': float(cfg['end']) - float(cfg['start']),
             'fillers': n_filler, 'redacted': n_redact, 'tightened': tightened,
-            'kept_pauses': kept_pauses}
+            'kept_pauses': kept_pauses, 'zooms': zturns}
 
 
 if __name__ == '__main__':

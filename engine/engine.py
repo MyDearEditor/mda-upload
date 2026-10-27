@@ -278,6 +278,116 @@ def sync_offset(video, audio, tmp):
     return float(off), conf, f'peak {peak_z:.1f}, {detail}'
 
 
+SPK_MIN_SEP = 2.5         # cluster separation below this and we admit we cannot tell
+SPK_MIN_SHARE = 0.12      # each speaker must hold at least this share of words for the split to mean anything
+SPK_MIN_RUNS = 0.75       # real turns are contiguous: labels that flip word to word are noise, not speakers
+
+
+def speaker_labels(vwav, awav, offset, words):
+    """Work out who is speaking, from the two recordings we already have.
+
+    The phone's own mic hears the agent in the room; the dialer hears both sides evenly. So a word that
+    is loud in BOTH is the agent, and a word loud only in the call recording is the client. The sync
+    offset is already known to within a fraction of a second, so the two can be compared word by word.
+
+    Speakerphone breaks this - the client comes out of the handset and back into the room mic - so the
+    separation between the two groups is measured and reported rather than assumed.
+
+    Tags each word dict in place with w['spk'] = 'agent'|'client' and returns (ok, confidence, detail).
+    Tagging the words themselves rather than returning indices keeps this safe when callers pass a
+    filtered subset of the transcript around.
+    """
+    import scipy.io.wavfile as wav
+    try:
+        _, v = wav.read(vwav)
+        _, a = wav.read(awav)
+    except Exception as ex:
+        return False, 0.0, 'could not read the aligned audio (%s)' % ex
+    for wd in words:
+        wd.pop('spk', None)
+    v = v.astype(np.float64)
+    a = a.astype(np.float64)
+    SR = 8000
+    vals, idx = [], []
+    for n, wd in enumerate(words):
+        s, e = float(wd['s']), float(wd['e'])
+        if e - s < 0.06:
+            continue
+        ai0, ai1 = int(s * SR), int(e * SR)
+        vi0, vi1 = int((s + offset) * SR), int((e + offset) * SR)
+        if ai0 < 0 or vi0 < 0 or ai1 > len(a) or vi1 > len(v) or ai1 <= ai0 or vi1 <= vi0:
+            continue
+        arms = float(np.sqrt(np.mean(a[ai0:ai1] ** 2))) + 1e-6
+        vrms = float(np.sqrt(np.mean(v[vi0:vi1] ** 2))) + 1e-6
+        vals.append(np.log(vrms / arms))      # how much louder the room mic is than the call, per word
+        idx.append(n)
+    if len(vals) < 40:
+        return False, 0.0, 'not enough clean words to tell the voices apart'
+
+    # two clusters on one dimension: the room-mic-hot group is the agent
+    x = np.asarray(vals)
+    lo, hi = float(np.percentile(x, 20)), float(np.percentile(x, 80))
+    grp = x > (lo + hi) / 2.0
+    for _ in range(40):
+        if grp.all() or not grp.any():
+            break
+        lo, hi = float(x[~grp].mean()), float(x[grp].mean())
+        new = np.abs(x - hi) < np.abs(x - lo)
+        if np.array_equal(new, grp):
+            break
+        grp = new
+    if grp.all() or not grp.any():
+        return False, 0.0, 'only one voice is audible on the phone video'
+    spread = float(x[~grp].std() + x[grp].std()) + 1e-6
+    sep = (float(x[grp].mean()) - float(x[~grp].mean())) / spread
+    share = float(grp.mean())
+
+    # people take turns: consecutive words close in time should mostly carry the same label. A split
+    # that flips word to word is the clustering finding noise, however far apart the two means look.
+    pairs = same = 0
+    for k in range(1, len(idx)):
+        if float(words[idx[k]]['s']) - float(words[idx[k - 1]]['e']) <= 1.5:
+            pairs += 1
+            same += bool(grp[k] == grp[k - 1])
+    runs = (same / pairs) if pairs else 0.0
+
+    detail = 'separation %.2f, turn coherence %.0f%%, agent holds %.0f%% of words' % (sep, runs * 100, share * 100)
+    if sep < SPK_MIN_SEP or runs < SPK_MIN_RUNS or not (SPK_MIN_SHARE <= share <= 1 - SPK_MIN_SHARE):
+        return False, sep, detail + ' - too close to call (speakerphone or a noisy room?)'
+    for k in range(len(idx)):
+        words[idx[k]]['spk'] = 'agent' if grp[k] else 'client'
+    return True, sep, detail
+
+
+def label_transcript(transcript, agent_name):
+    """Transcript lines prefixed with who said them, for the clip picker to read."""
+    out = []
+    for sg in transcript:
+        tags = [w.get('spk') for w in sg['words'] if w.get('spk')]
+        who = agent_name.upper() if tags.count('agent') >= tags.count('client') else 'CLIENT'
+        out.append('[%.1f-%.1f] %s: %s' % (sg['start'], sg['end'], who, sg['text'].strip()))
+    return out
+
+
+def agent_turns(transcript, start, end, join=0.8):
+    """Stretches of audio time where the agent is the one talking, for the push-in."""
+    ws = [w for sg in transcript for w in sg['words']
+          if w.get('spk') and w['e'] > start and w['s'] < end]
+    turns, cur = [], None
+    for w in sorted(ws, key=lambda x: x['s']):
+        if w['spk'] != 'agent':
+            continue
+        if cur and w['s'] - cur[1] <= join:
+            cur[1] = w['e']
+        else:
+            if cur:
+                turns.append(cur)
+            cur = [w['s'], w['e']]
+    if cur:
+        turns.append(cur)
+    return [(max(start, s), min(end, e)) for s, e in turns if min(end, e) > max(start, s)]
+
+
 def transcribe(audio, out_json, t0=0.0, t1=None):
     """Transcribe audio between t0 and t1 (seconds of the call recording). Timestamps are in full-call time."""
     from faster_whisper import WhisperModel
@@ -314,15 +424,20 @@ def claude(system, user, max_tokens=4000):
 CLIP_MIN, CLIP_MAX = 20.0, 90.0          # finished length, after every cut has been made
 
 
-def map_moments(transcript, agent_name):
+def map_moments(transcript, agent_name, labelled=False):
     """Pass 1 - read the whole call and mark every moment worth studying, typed and scored.
 
     Deliberately NOT asked to produce finished clips: picking and framing are different jobs, and the old
     single pass did both badly. Nothing here biases toward the agent talking - an objection handled is only
     teachable if you can hear the objection."""
-    lines = [f"[{sg['start']:.1f}-{sg['end']:.1f}] {sg['text'].strip()}" for sg in transcript]
+    if labelled:
+        lines = label_transcript(transcript, agent_name)
+        whose = 'Every line is marked with who said it. Trust those marks; do not second-guess them.'
+    else:
+        lines = [f"[{sg['start']:.1f}-{sg['end']:.1f}] {sg['text'].strip()}" for sg in transcript]
+        whose = 'The lines are NOT marked with who is speaking, so work it out from context.'
     system = f"""You are a sales coach reviewing a recorded life-insurance call so OTHER AGENTS can learn from it.
-The agent is {agent_name}; the other voice is the client. Output strict JSON only.
+The agent is {agent_name}; the other voice is the client. {whose} Output strict JSON only.
 
 Find up to 8 moments that would genuinely teach another agent something. For each:
   kind   - one of: opener, discovery, objection, close, rapport
@@ -579,8 +694,26 @@ def process(call):
             return
 
         agent_name = call.get('display_name', 'the agent')
+        # who is speaking, from the phone video's own mic against the dialer recording
+        try:
+            spk, spk_conf, spk_detail = speaker_labels(os.path.join(d, 'v.wav'), os.path.join(d, 'a.wav'),
+                                                       offset, [w for sg in transcript for w in sg['words']])
+        except Exception as ex:                       # never fail a call over the speaker split
+            spk, spk_conf, spk_detail = False, 0.0, 'speaker check failed (%s)' % ex
+            log.warning('%s: speaker detection error: %s', cid, ex)
+        log.info('%s: speakers: %s', cid, spk_detail if spk else 'not identified (%s)' % spk_detail)
+
+        # zoom mode is per upload; it needs to know who is talking, so it rides on the speaker labels
+        zoom_want = str(call.get('zoom', '')).lower() in ('1', 'true', 'yes', 'on')
+        zoom_note = ''
+        if zoom_want and not spk:
+            zoom_note = ("Zoom was switched on for this call, but we could not reliably tell your voice from "
+                         "the client's on the phone video, so these clips are flat. Recording on headphones - "
+                         "so the client is not coming back out of your phone speaker - is what lets it work.")
+            log.info('%s: zoom requested but speakers are not separable; delivering flat', cid)
+
         log.info('%s: mapping the call', cid)
-        moments = [m for m in map_moments(usable, agent_name) if m['end'] > a_min and m['start'] < a_max]
+        moments = [m for m in map_moments(usable, agent_name, spk) if m['end'] > a_min and m['start'] < a_max]
         chosen = choose_moments(moments, 5)
         log.info('%s: %d moments found, %d chosen (%s)', cid, len(moments), len(chosen),
                  ', '.join('%s %.0f' % (m['kind'], m['score']) for m in chosen) or 'none')
@@ -639,10 +772,12 @@ def process(call):
         for i, c in enumerate(clips, 1):
             hook = re.sub(r'[\\/:*?"<>|]', '', str(c.get('hook', f'Clip {i}')).strip())[:60] or f'Clip {i}'
             out = os.path.join(d, 'out', f'clip{i}.mp4')
+            zturns = agent_turns(transcript, float(c['start']), float(c['end'])) if (zoom_want and spk) else None
             try:
                 res = render({'video': video, 'audio': audio, 'offset': offset, 'transcript': tpath,
                               'start': float(c['start']), 'end': float(c['end']), 'hook': hook, 'out': out,
-                              'bleep_words': name_keys, 'cut_spans': cut_spans, 'gap_max': 0.5, 'gap_pad': 0.15, 'style': style})
+                              'bleep_words': name_keys, 'cut_spans': cut_spans, 'gap_max': 0.5, 'gap_pad': 0.15,
+                              'style': style, 'zoom_turns': zturns})
             except Exception as ex:
                 log.warning('%s: clip %d render failed: %s', cid, i, ex); dropped.append(f'{hook}: render failed'); continue
             if not CLIP_MIN <= res['duration'] <= CLIP_MAX:
@@ -666,9 +801,9 @@ def process(call):
                     'out': os.path.join(d, 'out', f'clip{i}.pdf'), 'clip': out, 'hook': hook,
                     'caption': caption, 'why': str(c.get('why', '')).strip(),
                     'agent': call.get('display_name', ''), 'when': stamp, 'duration': res['duration'],
-                    'rank': c.get('rank'), 'kind': c.get('kind'), 'of': len(clips),
+                    'rank': c.get('rank'), 'kind': c.get('kind'), 'of': len(clips), 'zoom_note': zoom_note,
                     'edits': {k: res.get(k) for k in ('picked', 'fillers', 'tightened', 'bleeps',
-                                                      'redacted', 'kept_pauses')}})
+                                                      'redacted', 'kept_pauses', 'zooms')}})
                 drive_upload(pdf, name + '.pdf', dest, 'application/pdf')
             except Exception as ex:                                # never lose the caption over a PDF problem
                 log.warning('%s: clip sheet failed (%s); delivering the caption as text', cid, ex)
