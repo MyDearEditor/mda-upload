@@ -259,6 +259,21 @@ body.shake { animation: shake .45s steps(6) both; }
 .mode-opt small { display: block; font-size: 15px; color: var(--text-dim); line-height: 1.3; }
 .tag { font-family: var(--font-pixel); font-size: 7px; padding: 3px 6px; background: rgba(255,204,26,.2); color: var(--gold); border: 1px solid var(--gold); vertical-align: middle; }
 
+/* ---------- zoom toggle (per upload) ---------- */
+.zoom-switch { display: flex; gap: 14px; align-items: flex-start; margin-top: 14px; padding: 12px; cursor: pointer;
+  border: var(--pixel) solid var(--border); outline: var(--pixel) solid var(--border-dark); background: var(--panel-2); }
+.zoom-switch.hidden { display: none; }
+.zoom-switch input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.zoom-track { position: relative; flex: none; width: 58px; height: 30px; margin-top: 2px; background: #0b1f5c;
+  border: 2px solid var(--border); transition: background .15s, border-color .15s; }
+.zoom-knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; background: var(--text-dim); transition: left .15s, background .15s; }
+.zoom-switch:has(input:checked) { border-color: var(--gold); background: rgba(255,204,26,.12); }
+.zoom-switch:has(input:checked) .zoom-track { background: rgba(255,204,26,.25); border-color: var(--gold); }
+.zoom-switch:has(input:checked) .zoom-knob { left: 31px; background: var(--gold); }
+.zoom-switch input:focus-visible ~ .zoom-track { outline: 2px solid #fff; }
+.zoom-text b { display: block; font-family: var(--font-pixel); font-size: 9px; margin-bottom: 4px; }
+.zoom-text small { display: block; font-size: 15px; color: var(--text-dim); line-height: 1.3; }
+
 /* ---------- my style ---------- */
 .style-grid { display: grid; grid-template-columns: 1fr 260px; gap: 22px; align-items: start; }
 @media (max-width: 700px) { .style-grid { grid-template-columns: 1fr; } .phone-preview { margin: 0 auto; } }

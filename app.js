@@ -262,7 +262,8 @@
     var callId, ids = {};
     status('Starting…');
     var mode = (document.querySelector('input[name="mode"]:checked') || {}).value || 'clips'; save('mda_mode', mode);
-    api({ action: 'startCall', note: $('note').value, mode: mode })
+    var zoom = mode === 'clips' && $('zoom').checked; save('mda_zoom', zoom ? 1 : 0);
+    api({ action: 'startCall', note: $('note').value, mode: mode, zoom: zoom ? 1 : 0 })
       .then(function (j) { callId = j.callId; status('Uploading video…'); return uploadOne('video', files.video, callId); })
       .then(function (id) { ids.video = id; $('drop-video').classList.add('done'); status('Uploading call recording…'); return uploadOne('audio', files.audio, callId); })
       .then(function (id) { ids.audio = id; $('drop-audio').classList.add('done'); status('Finishing…');
@@ -281,9 +282,20 @@
         $('upload-btn').disabled = false;
       });
   };
-  (function () { var m = load('mda_mode'); var r = m && document.querySelector('input[name="mode"][value="' + m + '"]'); if (r) r.checked = true; })();
+  // zoom only means anything when we are cutting clips, so it hides in sync-only mode
+  function syncZoomVisible() {
+    var m = (document.querySelector('input[name="mode"]:checked') || {}).value || 'clips';
+    $('zoom-switch').classList.toggle('hidden', m !== 'clips');
+  }
+  (function () {
+    var m = load('mda_mode'); var r = m && document.querySelector('input[name="mode"][value="' + m + '"]'); if (r) r.checked = true;
+    $('zoom').checked = !!load('mda_zoom');
+    syncZoomVisible();
+  })();
+  $('zoom').onchange = function () { save('mda_zoom', this.checked ? 1 : 0); };
   document.querySelectorAll('input[name="mode"]').forEach(function (r) { r.onchange = function () {
     $('upload-btn').innerHTML = '<span class="arr">▶</span> ' + (r.value === 'sync' ? 'UPLOAD + SYNC ONLY' : 'UPLOAD BOTH FILES') + ' <span class="arr">◀</span>';
+    syncZoomVisible();
   }; });
   $('upload-again').onclick = function () {
     ['video', 'audio'].forEach(function (k) { setFile(k, null); setBar(k, 0, 0); $('drop-' + k).classList.remove('done'); $('file-' + k).value = ''; });

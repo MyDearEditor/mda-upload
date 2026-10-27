@@ -140,6 +140,11 @@
         <label class="mode-opt"><input type="radio" name="mode" value="sync"><span><b>SYNCED FULL VIDEO ONLY</b><small>No clips. Just your video with the call audio synced, ready to edit yourself.</small></span></label>
       </div>
       <label class="note-label">CALL NAME <small>(optional — becomes this call's folder name in your Drive)</small><input id="note" maxlength="200" placeholder="e.g. Facebook lead, closed on the 2nd call"></label>
+      <label class="zoom-switch" id="zoom-switch">
+        <input type="checkbox" id="zoom">
+        <span class="zoom-track" aria-hidden="true"><span class="zoom-knob"></span></span>
+        <span class="zoom-text"><b>ZOOM WHILE YOU TALK <span class="tag">NEW</span></b><small>The camera pushes in while you are talking and pulls back out when the client is. It holds attention longer. Works best when you wear headphones, so the client is not coming out of your phone speaker.</small></span>
+      </label>
       <button class="btn gold big" id="upload-btn" disabled><span class="arr">▶</span> UPLOAD BOTH FILES <span class="arr">◀</span></button>
       <div class="total-bar hidden" id="total-wrap"><div class="total-fill" id="total-fill"></div><div class="total-label" id="upload-status"></div><div class="total-pct" id="total-pct">0%</div></div>
       <p class="err" id="upload-err"></p>
