@@ -10,7 +10,7 @@ apt-get install -y ffmpeg python3 python3-pip python3-venv git unzip fontconfig
 # Poppins font for captions
 mkdir -p /usr/local/share/fonts/poppins
 if [ ! -f /usr/local/share/fonts/poppins/Poppins-Bold.ttf ]; then
-  for w in Bold Black SemiBold; do
+  for w in Regular Medium SemiBold Bold Black; do
     curl -fsSL "https://github.com/google/fonts/raw/main/ofl/poppins/Poppins-$w.ttf" -o "/usr/local/share/fonts/poppins/Poppins-$w.ttf"
   done
 fi
@@ -35,7 +35,7 @@ fi
 # Python env
 if [ ! -d /opt/mda/venv ]; then python3 -m venv /opt/mda/venv; fi
 /opt/mda/venv/bin/pip install --upgrade pip
-/opt/mda/venv/bin/pip install faster-whisper numpy scipy anthropic requests
+/opt/mda/venv/bin/pip install faster-whisper numpy scipy anthropic requests reportlab pillow
 
 # Env file (secrets are pasted in by Mason with configure.sh)
 if [ ! -f /opt/mda/.env ]; then

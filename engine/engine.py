@@ -9,12 +9,18 @@ Env (see /opt/mda/.env): MDA_API_URL, MDA_ENGINE_SECRET, ANTHROPIC_API_KEY,
 optional: CLAUDE_MODEL, WHISPER_MODEL, MDA_WORK_DIR, MDA_POLL_SECONDS
 """
 import os, sys, json, time, re, shutil, subprocess, logging, datetime
+from zoneinfo import ZoneInfo
 import numpy as np
 import requests
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from render import render  # noqa: E402
+try:                                    # a missing reportlab must never take the whole engine down;
+    import caption_pdf                  # without it every clip still ships, with a .txt caption
+except Exception as _ex:                # noqa: E402
+    caption_pdf = None
+    print('caption_pdf unavailable (%s) - captions will be delivered as .txt' % _ex)
 
 API = os.environ['MDA_API_URL']
 SECRET = os.environ['MDA_ENGINE_SECRET']
@@ -110,17 +116,50 @@ def drive_mkdir(name, parent_id):
     return r.json()['id']
 
 
+# ---------------------------------------------------------------- names
+ET = ZoneInfo('America/New_York')
+
+
+def uploaded_et(call):
+    """uploaded_at as Eastern time. The doorman stores UTC, so a 9pm ET upload reads as the next day
+    until it is converted — that is what this fixes."""
+    s = str(call.get('uploaded_at', '') or '').strip()
+    dt = None
+    if s:
+        try:
+            dt = datetime.datetime.fromisoformat(s.replace('Z', '+00:00'))
+        except ValueError:
+            for fmt in ('%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M'):
+                try:
+                    dt = datetime.datetime.strptime(s[:len(datetime.datetime.now().strftime(fmt))], fmt)
+                    break
+                except ValueError:
+                    continue
+    if dt is None:
+        dt = datetime.datetime.now(datetime.timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(ET)
+
+
+def when_label(call):
+    """'2026-10-26 - 6.42 PM ET' — the date and Eastern time every name and the clip sheet share."""
+    d = uploaded_et(call)
+    return '%04d-%02d-%02d - %d.%02d %s ET' % (d.year, d.month, d.day, d.hour % 12 or 12, d.minute,
+                                               'AM' if d.hour < 12 else 'PM')
+
+
+def safe_name(s, limit=70):
+    """Trim to something Drive, Windows and macOS are all happy with."""
+    s = re.sub(r'[\\/:*?"<>|]', ' ', str(s or ''))
+    s = re.sub(r'\s+', ' ', s).strip(' .')
+    return s[:limit].strip(' .')
+
+
 def call_folder_name(call):
-    """A clear, unique, sortable name for this call's delivery subfolder, e.g. '2026-10-26 1430 - price objection'."""
-    at = str(call.get('uploaded_at', ''))
-    date = at[:10] or datetime.date.today().isoformat()
-    hhmm = (at[11:13] + at[14:16]) if len(at) >= 16 else ''
-    note = re.sub(r'[\\/:*?"<>|]', ' ', str(call.get('note', '') or '')).strip()
-    note = re.sub(r'\s+', ' ', note)[:40].strip()
-    label = (date + (' ' + hhmm if hhmm else '')).strip()
-    if note:
-        label += ' - ' + note
-    return label or call.get('call_id', 'Call')
+    """This call's delivery subfolder: the call name the agent typed, then the date and Eastern time,
+    e.g. 'Facebook lead - 2026-10-26 - 6.42 PM ET'."""
+    return (safe_name(call.get('note'), 60) or 'Call') + ' - ' + when_label(call)
 
 
 # ---------------------------------------------------------------- media
@@ -287,7 +326,7 @@ Also list EVERY word or phrase anywhere inside your chosen clips that matches th
 {PROHIBITED}
 
 JSON shape:
-{{"clips":[{{"start":<sec>,"end":<sec>,"hook":"<=6 words, banner text","ig_caption":"2-3 sentence Instagram caption + 3 hashtags"}}],
+{{"clips":[{{"start":<sec>,"end":<sec>,"hook":"<=6 words, banner text","ig_caption":"2-3 sentence Instagram caption + 3 hashtags","why":"1-2 plain sentences for the agent: what makes this moment worth studying, and why this is where it starts and ends. Speak to the agent as 'you'. No jargon."}}],
  "client_names":["<first name>","<last name>","<spouse/family names>"],
  "redactions":[{{"text":"<exact words as they appear in the transcript>","type":"health|carrier|location|contact|financial|name"}}]}}
 
@@ -361,8 +400,8 @@ def process(call):
 
         mode = call.get('mode') or 'clips'
         style = call.get('style') or {}
-        date = str(call.get('uploaded_at', ''))[:10] or datetime.date.today().isoformat()
-        delivered, dropped = [], []
+        stamp = when_label(call)                      # '2026-10-26 - 6.42 PM ET', shared by every name here
+        delivered, dropped, used_names = [], [], set()
 
         # each upload gets its OWN subfolder inside the agent's folder, so two calls never pile into one place
         try:
@@ -375,7 +414,7 @@ def process(call):
         # always deliver the full synced video (original quality, clean call audio) so agents can edit themselves
         try:
             full = synced_full_video(video, audio, offset, a_min, a_max, os.path.join(d, 'out', 'full.mp4'))
-            fid_full = drive_upload(full, f'{date} - Full call (synced audio).mp4', dest, 'video/mp4')
+            fid_full = drive_upload(full, f'Full call (synced audio) - {stamp}.mp4', dest, 'video/mp4')
             log.info('%s: delivered full synced video (%.0fs)', cid, a_max - a_min)
         except Exception as ex:
             log.warning('%s: full synced video failed: %s', cid, ex); fid_full = None
@@ -415,11 +454,29 @@ def process(call):
             chk = compliance_check(res['caption_text'], hook)
             if chk.get('flagged') or chk.get('unsure'):
                 dropped.append(f'{hook}: compliance ({", ".join(map(str, chk.get("items", [])))[:200]})'); continue
-            name = f'{date} - {hook}'
+            # name: the clip's own hook, then the date and Eastern time of the upload
+            name = f'{hook} - {stamp}'
+            if name.lower() in used_names:                         # two clips with the same hook
+                name = f'{hook} ({i}) - {stamp}'
+            used_names.add(name.lower())
             fid = drive_upload(out, name + '.mp4', dest, 'video/mp4')
-            txt = os.path.join(d, 'out', f'clip{i}.txt')
-            open(txt, 'w').write(str(c.get('ig_caption', '')).strip() + '\n')
-            drive_upload(txt, name + '.txt', dest, 'text/plain')
+
+            # clip sheet: thumbnail, copy-and-paste caption, and why it was cut this way
+            caption = str(c.get('ig_caption', '')).strip()
+            try:
+                if caption_pdf is None:
+                    raise RuntimeError('reportlab not installed')
+                pdf = caption_pdf.build({
+                    'out': os.path.join(d, 'out', f'clip{i}.pdf'), 'clip': out, 'hook': hook,
+                    'caption': caption, 'why': str(c.get('why', '')).strip(),
+                    'agent': call.get('display_name', ''), 'when': stamp, 'duration': res['duration'],
+                    'edits': {k: res.get(k) for k in ('picked', 'fillers', 'tightened', 'bleeps', 'redacted')}})
+                drive_upload(pdf, name + '.pdf', dest, 'application/pdf')
+            except Exception as ex:                                # never lose the caption over a PDF problem
+                log.warning('%s: clip sheet failed (%s); delivering the caption as text', cid, ex)
+                txt = os.path.join(d, 'out', f'clip{i}.txt')
+                open(txt, 'w').write(caption + '\n')
+                drive_upload(txt, name + '.txt', dest, 'text/plain')
             delivered.append(fid)
             log.info('%s: delivered "%s" (%.0fs, %d bleeps)', cid, hook, res['duration'], res['bleeps'])
 

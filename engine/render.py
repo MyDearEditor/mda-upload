@@ -11,7 +11,8 @@ config keys:
   cut_spans               [[s,e],...] audio-time spans whose words are removed entirely
   gap_max, gap_pad        dead-air trimming (default 0.5 / 0.15)
   cut_fillers             remove um/uh, stutters, and clearly-filler "like" / "you know" (default True)
-Returns {"out", "duration", "caption_text", "bleeps", "cuts"}.
+Returns {"out", "duration", "caption_text", "bleeps", "cuts", "picked", "fillers", "redacted", "tightened"}
+(the last four describe what the edit actually did, for the clip sheet PDF).
 """
 import json, sys, subprocess, re, os, tempfile, shutil
 import numpy as np
@@ -54,11 +55,13 @@ def _mark_fillers(words):
         nxt = words[i + 1] if i + 1 < len(words) else None
         if t in FILLERS:
             w['cut'] = True
+            w['why'] = 'filler'
             continue
         # stutter: the same word twice in a row with no real pause ("I I think", "the the") — drop the first
         if (nxt is not None and t and _wkey(nxt['w']) == t and not nxt['cut']
                 and nxt['s'] - w['e'] < 0.35 and not re.search(r'[.?!]$', w['w'].strip())):
             w['cut'] = True
+            w['why'] = 'filler'
             continue
         prev_t = _wkey(prev['w']) if prev else ''
         prev_comma = bool(prev) and bool(re.search(r'[,–—]$', prev['w'].strip()))
@@ -69,6 +72,7 @@ def _mark_fillers(words):
             # the previous word doesn't make it meaningful ("would like", "looks like", "I like")
             if (pause_before and pause_after) or (prev_t not in LIKE_SAFE_BEFORE and (pause_before or pause_after)):
                 w['cut'] = True
+                w['why'] = 'filler'
                 continue
         # parenthetical "you know": pauses or commas around the pair
         if t == 'you' and nxt is not None and _wkey(nxt['w']) == 'know' and not nxt['cut']:
@@ -77,6 +81,7 @@ def _mark_fillers(words):
             pa = after is None or after['s'] - nxt['e'] > 0.25 or re.search(r'[,.?!]$', nxt['w'].strip())
             if pb and pa:
                 w['cut'] = nxt['cut'] = True
+                w['why'] = nxt['why'] = 'filler'
 
 
 def _ts(t):
@@ -109,12 +114,17 @@ def _render(cfg, out_path, tmp):
     seen = False
     for w in words:
         w['bleep'] = w['cut'] = False
+        w['why'] = ''
         if any(cs[0] <= w['s'] < cs[1] or cs[0] < w['e'] <= cs[1] for cs in cut_spans):
             w['cut'] = True
+            w['why'] = 'redaction'
             continue
         if name_keys and any(k in re.sub(r'[^a-z]', '', w['w'].lower()) for k in name_keys):
-            if seen: w['cut'] = True
-            else: w['bleep'] = seen = True
+            if seen:
+                w['cut'] = True
+                w['why'] = 'name'
+            else:
+                w['bleep'] = seen = True
 
     # ---- filler words: cut them like redactions so audio, video and captions all skip them
     if cfg.get('cut_fillers', True):
@@ -126,6 +136,7 @@ def _render(cfg, out_path, tmp):
     if len(kept) < 5:
         raise ValueError('clip has too few words left after redaction')
     segs = []
+    tightened = 0
     a = max(cfg['start'], kept[0]['s'] - pad)
     for prev, nxt in zip(kept, kept[1:]):
         cw = [w for w in words if w['cut'] and prev['e'] <= w['s'] < nxt['s']]
@@ -134,7 +145,11 @@ def _render(cfg, out_path, tmp):
             a = min(nxt['s'] - 0.05, max(nxt['s'] - pad, cw[-1]['e'] + 0.02))
         elif nxt['s'] - prev['e'] > gap_max:
             segs.append([a, prev['e'] + pad]); a = nxt['s'] - pad
+            tightened += 1
     segs.append([a, min(cfg['end'], kept[-1]['e'] + 0.4)])
+    # counts for the clip sheet, taken before `words` is narrowed to the survivors
+    n_filler = sum(1 for w in words if w['cut'] and w.get('why') == 'filler')
+    n_redact = sum(1 for w in words if w['cut'] and w.get('why') in ('redaction', 'name'))
     words = kept
     A0 = segs[0][0]
     A1 = segs[-1][1]
@@ -255,7 +270,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     subprocess.run(cmd, check=True)
     caption_text = ' '.join(' '.join(x[1] for x in c) for c in cards)
     return {'out': out_path, 'duration': total, 'caption_text': caption_text,
-            'bleeps': sum(w['bleep'] for w in words), 'cuts': len(segs) - 1}
+            'bleeps': sum(w['bleep'] for w in words), 'cuts': len(segs) - 1,
+            'picked': float(cfg['end']) - float(cfg['start']),
+            'fillers': n_filler, 'redacted': n_redact, 'tightened': tightened}
 
 
 if __name__ == '__main__':
