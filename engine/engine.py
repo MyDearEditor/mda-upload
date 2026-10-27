@@ -278,9 +278,13 @@ def sync_offset(video, audio, tmp):
     return float(off), conf, f'peak {peak_z:.1f}, {detail}'
 
 
-SPK_MIN_SEP = 2.5         # cluster separation below this and we admit we cannot tell
+# Calibrated against a real headphone call (separation 1.66-1.83, coherence 80-82%) and a synthetic
+# speakerphone (separation 1.28, coherence 48%). Separation alone cannot tell those apart - real speech
+# is too variable within one speaker - so turn coherence is the gate that decides and separation is only
+# a floor against degenerate splits. spkcheck.py prints both for any call, to recalibrate from evidence.
+SPK_MIN_SEP = 1.00        # a floor, not the real test
 SPK_MIN_SHARE = 0.12      # each speaker must hold at least this share of words for the split to mean anything
-SPK_MIN_RUNS = 0.75       # real turns are contiguous: labels that flip word to word are noise, not speakers
+SPK_MIN_RUNS = 0.70       # the decider: real turns hold together, noise flips word to word
 
 
 def speaker_labels(vwav, awav, offset, words):
