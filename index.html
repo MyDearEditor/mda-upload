@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2">
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
@@ -140,10 +140,18 @@
         <label class="mode-opt"><input type="radio" name="mode" value="sync"><span><b>SYNCED FULL VIDEO ONLY</b><small>No clips. Just your video with the call audio synced, ready to edit yourself.</small></span></label>
       </div>
       <label class="note-label">CALL NAME <small>(optional — becomes this call's folder name in your Drive)</small><input id="note" maxlength="200" placeholder="e.g. Facebook lead, closed on the 2nd call"></label>
-      <label class="zoom-switch" id="zoom-switch">
+      <label class="zoom-pad" id="zoom-switch">
         <input type="checkbox" id="zoom">
-        <span class="zoom-track" aria-hidden="true"><span class="zoom-knob"></span></span>
-        <span class="zoom-text"><b>ZOOM WHILE YOU TALK <span class="tag">NEW</span></b><small>The camera pushes in while you are talking and pulls back out when the client is. It holds attention longer. Works best when you wear headphones, so the client is not coming out of your phone speaker.</small></span>
+        <span class="zoom-head">
+          <span class="zoom-title">🎬 ZOOM WHILE YOU TALK</span>
+          <span class="tag">NEW</span>
+        </span>
+        <span class="zoom-lever" aria-hidden="true">
+          <span class="zoom-ghost off">OFF</span>
+          <span class="zoom-ghost on">ON</span>
+          <span class="zoom-knob"><b class="k-off">OFF</b><b class="k-on">ON</b></span>
+        </span>
+        <small class="zoom-copy">The camera pushes in while <b>you</b> talk and pulls back out for the client. It keeps people watching longer.<br><span class="zoom-tip">⚠ WEAR HEADPHONES — so the client isn't coming out of your phone speaker.</span></small>
       </label>
       <button class="btn gold big" id="upload-btn" disabled><span class="arr">▶</span> UPLOAD BOTH FILES <span class="arr">◀</span></button>
       <div class="total-bar hidden" id="total-wrap"><div class="total-fill" id="total-fill"></div><div class="total-label" id="upload-status"></div><div class="total-pct" id="total-pct">0%</div></div>

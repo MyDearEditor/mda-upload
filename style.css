@@ -259,20 +259,59 @@ body.shake { animation: shake .45s steps(6) both; }
 .mode-opt small { display: block; font-size: 15px; color: var(--text-dim); line-height: 1.3; }
 .tag { font-family: var(--font-pixel); font-size: 7px; padding: 3px 6px; background: rgba(255,204,26,.2); color: var(--gold); border: 1px solid var(--gold); vertical-align: middle; }
 
-/* ---------- zoom toggle (per upload) ---------- */
-.zoom-switch { display: flex; gap: 14px; align-items: flex-start; margin-top: 14px; padding: 12px; cursor: pointer;
-  border: var(--pixel) solid var(--border); outline: var(--pixel) solid var(--border-dark); background: var(--panel-2); }
-.zoom-switch.hidden { display: none; }
-.zoom-switch input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.zoom-track { position: relative; flex: none; width: 58px; height: 30px; margin-top: 2px; background: #0b1f5c;
-  border: 2px solid var(--border); transition: background .15s, border-color .15s; }
-.zoom-knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; background: var(--text-dim); transition: left .15s, background .15s; }
-.zoom-switch:has(input:checked) { border-color: var(--gold); background: rgba(255,204,26,.12); }
-.zoom-switch:has(input:checked) .zoom-track { background: rgba(255,204,26,.25); border-color: var(--gold); }
-.zoom-switch:has(input:checked) .zoom-knob { left: 31px; background: var(--gold); }
-.zoom-switch input:focus-visible ~ .zoom-track { outline: 2px solid #fff; }
-.zoom-text b { display: block; font-family: var(--font-pixel); font-size: 9px; margin-bottom: 4px; }
-.zoom-text small { display: block; font-size: 15px; color: var(--text-dim); line-height: 1.3; }
+/* ---------- zoom toggle (per upload): a big arcade switch ---------- */
+.zoom-pad { display: block; position: relative; margin-top: 16px; padding: 16px 16px 14px; cursor: pointer;
+  background: linear-gradient(180deg, #24489c 0%, var(--panel) 100%);
+  border: var(--pixel) solid var(--border); outline: var(--pixel) solid var(--border-dark);
+  box-shadow: 0 6px 0 var(--border-dark); transition: box-shadow .12s, transform .12s, background .18s; }
+.zoom-pad.hidden { display: none; }
+.zoom-pad:hover { filter: brightness(1.06); }
+.zoom-pad:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--border-dark); }
+.zoom-pad input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+.zoom-head { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.zoom-title { font-family: var(--font-pixel); font-size: 12px; color: var(--gold); letter-spacing: 1px;
+  text-shadow: 2px 2px 0 var(--border-dark); }
+
+/* the lever: two labelled halves with a chunky pixel knob that slides between them */
+.zoom-lever { position: relative; display: block; width: 100%; max-width: 320px; height: 62px; margin: 13px auto 12px;
+  background: #0a1c52; border: var(--pixel) solid var(--border-dark); outline: 2px solid rgba(143,211,255,.5);
+  box-shadow: inset 0 4px 0 rgba(0,0,0,.45); transition: background .18s; }
+.zoom-ghost { position: absolute; top: 0; width: 50%; height: 100%; display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-pixel); font-size: 11px; letter-spacing: 2px; color: var(--border); opacity: .22; }
+.zoom-ghost.off { left: 0; }
+.zoom-ghost.on { right: 0; }
+.zoom-knob { position: absolute; top: 5px; left: 5px; width: calc(50% - 10px); height: calc(100% - 10px);
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, #8fa6c9 0%, #5c6f93 100%);
+  border: 3px solid #c9e3ff; box-shadow: 0 4px 0 #0b1f5c, inset 0 -3px 0 rgba(0,0,0,.25);
+  transition: left .16s steps(4), background .18s, border-color .18s; }
+.zoom-knob b { font-family: var(--font-pixel); font-size: 13px; letter-spacing: 2px; color: #11204a; text-shadow: 1px 1px 0 rgba(255,255,255,.35); }
+.zoom-knob .k-on { display: none; }
+
+.zoom-pad:has(input:checked) { background: linear-gradient(180deg, #3a5fbe 0%, #1b3a9e 100%); border-color: var(--gold); }
+.zoom-pad:has(input:checked) .zoom-lever { background: #3b2a00; }
+.zoom-pad:has(input:checked) .zoom-knob { left: calc(50% + 5px);
+  background: linear-gradient(180deg, #ffe066 0%, var(--gold) 55%, var(--gold-2) 100%);
+  border-color: #fff2a8; box-shadow: 0 4px 0 var(--gold-dark), inset 0 -3px 0 rgba(0,0,0,.2); }
+.zoom-pad:has(input:checked) .zoom-knob .k-off { display: none; }
+.zoom-pad:has(input:checked) .zoom-knob .k-on { display: block; }
+.zoom-pad:has(input:checked) .zoom-knob b { color: #2a1200; text-shadow: 1px 1px 0 rgba(255,255,255,.45); }
+.zoom-pad:has(input:checked) .zoom-ghost { color: var(--gold); opacity: .25; }
+.zoom-pad:has(input:checked) .zoom-title { animation: zoomPulse 1.4s ease-in-out infinite; }
+@keyframes zoomPulse { 50% { text-shadow: 2px 2px 0 var(--border-dark), 0 0 14px var(--gold); } }
+.zoom-pad input:focus-visible ~ .zoom-lever { outline: 3px solid #fff; }
+
+.zoom-copy { display: block; text-align: center; font-size: 15px; line-height: 1.4; color: var(--text-dim); }
+.zoom-copy b { color: #fff; }
+.zoom-tip { display: inline-block; margin-top: 7px; font-family: var(--font-pixel); font-size: 8px; line-height: 1.7;
+  color: var(--gold); letter-spacing: .5px; }
+@media (max-width: 480px) {
+  .zoom-title { font-size: 10px; }
+  .zoom-lever { height: 54px; }
+  .zoom-knob b { font-size: 11px; }
+  .zoom-ghost { font-size: 10px; }
+}
 
 /* ---------- my style ---------- */
 .style-grid { display: grid; grid-template-columns: 1fr 260px; gap: 22px; align-items: start; }
