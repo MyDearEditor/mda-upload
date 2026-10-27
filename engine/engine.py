@@ -180,19 +180,48 @@ def sync_offset(video, audio, tmp):
     lag = k - (len(ea) - 1)
     peak_z = float((c[k] - np.median(c)) / (np.std(c) + 1e-9))
 
-    # agreement: each half of the call recording, matched on its own, must land on the same offset
+    adur, vdur = len(a) / 8000.0, len(v) / 8000.0
+    EPS = 8000 // HOP                             # envelope points per second (50)
+
+    def halves_agree_at(off_s):
+        """Validate a candidate offset using ONLY the stretch of the recording that overlaps the video:
+        both halves of that overlap must independently land on (nearly) the same offset. This also
+        works when the video is just a short snippet of a much longer call."""
+        o0, o1 = max(0.0, -off_s), min(adur, vdur - off_s)
+        if o1 - o0 < 40:                          # too little shared time to judge (also rejected later)
+            return None
+        mid = (o0 + o1) / 2.0
+        got = []
+        for s0, s1 in ((o0, mid), (mid, o1)):
+            i0 = int(s0 * EPS)
+            seg = ea[i0:int(s1 * EPS)]
+            if len(seg) < 15 * EPS:
+                return None
+            seg = seg - seg.mean()
+            cs = s.correlate(ev, seg, mode='full', method='fft')
+            got.append(((int(np.argmax(cs)) - (len(seg) - 1)) - i0) / float(EPS))
+        return (got[0] + got[1]) / 2.0 if abs(got[0] - got[1]) <= 0.35 else None
+
+    # candidate offsets: the global peak, plus what each half of the whole recording suggests on its own
+    # (with a snippet video the global peak can land in the wrong place; one of these usually has it)
     half = len(ea) // 2
-    implied = []
+    cands = [lag / float(EPS)]
     for h0, seg in ((0, ea[:half]), (half, ea[half:])):
         seg = seg - seg.mean()
-        if len(seg) < 1500:                       # need at least ~30 s per half
+        if len(seg) >= 1500:
+            cs = s.correlate(ev, seg, mode='full', method='fft')
+            cands.append(((int(np.argmax(cs)) - (len(seg) - 1)) - h0) / float(EPS))
+    off, agree, tried = cands[0], False, []
+    for cand in cands:
+        if any(abs(cand - t) < 1.0 for t in tried):
             continue
-        cs = s.correlate(ev, seg, mode='full', method='fft')
-        implied.append((int(np.argmax(cs)) - (len(seg) - 1)) - h0)
-    agree = len(implied) == 2 and abs(implied[0] - implied[1]) * HOP / 8000.0 <= 0.35
-    detail = 'halves agree' if agree else ('halves disagree: ' + ', '.join(f'{i * HOP / 8000.0:+.1f}s' for i in implied))
-
-    off = lag * HOP / 8000.0
+        tried.append(cand)
+        got = halves_agree_at(cand)
+        if got is not None:
+            off, agree = got, True
+            break
+    detail = (f'overlap halves agree at {off:+.1f}s' if agree else
+              'no overlap agreement (candidates ' + ', '.join(f'{t:+.1f}s' for t in tried) + ')')
     # sample-accurate refine on a 20 s window in the middle of the overlap
     adur, vdur = len(a) / 8000.0, len(v) / 8000.0
     o0, o1 = max(0.0, -off), min(adur, vdur - off)
@@ -205,7 +234,8 @@ def sync_offset(video, audio, tmp):
         if len(va) > len(ca) > 8000 * 4:
             cc = s.correlate(va - va.mean(), ca - ca.mean(), mode='valid')
             off = (tv0 + float(np.argmax(cc)) / 8000.0) - ta
-    conf = peak_z if agree else 0.0
+    # agreement across independent windows is the real gate; the peak score is kept for the logs
+    conf = max(peak_z, MIN_SYNC_CONFIDENCE) if agree else 0.0
     return float(off), conf, f'peak {peak_z:.1f}, {detail}'
 
 
