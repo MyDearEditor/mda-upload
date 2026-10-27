@@ -20,6 +20,8 @@ import numpy as np
 SR = 48000
 FPS = 30
 RED = '&H002B1BE0'   # BGR for #E01B2B
+BLEEP_LEVEL = 0.175  # 30% quieter than the original 0.25 - audible, not startling
+HOOK_SECONDS = 8.0   # the banner lands and leaves; it is a hook, not a watermark
 
 
 def _pcm(path, start, dur, sr):
@@ -89,28 +91,19 @@ def _ts(t):
     return f'{h}:{m:02d}:{s:05.2f}'
 
 
-def render(cfg):
-    out_path = os.path.abspath(cfg['out'])
-    os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    tmp = tempfile.mkdtemp(dir=os.path.dirname(out_path))
-    try:
-        return _render(cfg, out_path, tmp)
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-def _render(cfg, out_path, tmp):
-    # ---- words in range
-    words = []
-    for seg in json.load(open(cfg['transcript'])):
+def words_in_range(transcript, start, end):
+    """Every transcribed word that sits wholly inside [start, end], as fresh dicts."""
+    out = []
+    for seg in json.load(open(transcript)) if isinstance(transcript, str) else transcript:
         for w in seg['words']:
-            if w['s'] >= cfg['start'] - 0.05 and w['e'] <= cfg['end'] + 0.05:
-                words.append(dict(w))
-    if not words:
-        raise ValueError('no words in clip range')
+            if w['s'] >= start - 0.05 and w['e'] <= end + 0.05:
+                out.append(dict(w))
+    return out
 
-    name_keys = [k.lower() for k in cfg.get('bleep_words', []) if k]
-    cut_spans = cfg.get('cut_spans', [])
+
+def mark_words(words, bleep_words=(), cut_spans=(), cut_fillers=True):
+    """Tag each word cut/bleep and why. Redactions and repeat names go first, then fillers."""
+    name_keys = [k.lower() for k in bleep_words if k]
     seen = False
     for w in words:
         w['bleep'] = w['cut'] = False
@@ -125,32 +118,103 @@ def _render(cfg, out_path, tmp):
                 w['why'] = 'name'
             else:
                 w['bleep'] = seen = True
-
-    # ---- filler words: cut them like redactions so audio, video and captions all skip them
-    if cfg.get('cut_fillers', True):
+    if cut_fillers:
         _mark_fillers(words)
+    return words
 
-    # ---- keep-segments: trim dead air and drop cut words
-    gap_max, pad = cfg.get('gap_max', 0.5), cfg.get('gap_pad', 0.15)
+
+def _gap_allow(prev, out_t, base):
+    """How much silence to leave standing after this word.
+
+    One threshold for the whole clip was wrong in both directions: dead air in the opening seconds
+    loses the viewer, while the beat after a question or a close is the thing other agents need to hear.
+    """
+    if out_t < 3.0:
+        return 0.22                      # open tight - the first seconds decide whether anyone stays
+    t = prev['w'].strip()
+    if t.endswith('?'):
+        return 1.30                      # the silence after a question is the technique, not dead air
+    if t.endswith(('.', '!')):
+        return 0.80                      # let a finished thought land
+    return base
+
+
+def plan_segments(words, start, end, gap_max=0.5, pad=0.15, tail=0.4):
+    """Work out which stretches survive, without touching ffmpeg.
+
+    Returns (segs, total_seconds, stats) or None if too little is left. The engine calls this to
+    predict a clip's finished length before committing to a render, so a clip can be sized by what
+    it will ACTUALLY be, not by the span the picker guessed.
+    """
     kept = [w for w in words if not w['cut']]
     if len(kept) < 5:
-        raise ValueError('clip has too few words left after redaction')
-    segs = []
-    tightened = 0
-    a = max(cfg['start'], kept[0]['s'] - pad)
+        return None
+    segs, tightened, kept_pauses = [], 0, 0
+    a = max(start, kept[0]['s'] - pad)
+    out_t = 0.0
     for prev, nxt in zip(kept, kept[1:]):
         cw = [w for w in words if w['cut'] and prev['e'] <= w['s'] < nxt['s']]
         if cw:
-            segs.append([a, max(prev['e'] + 0.05, min(prev['e'] + pad, cw[0]['s'] - 0.02))])
+            e0 = max(prev['e'] + 0.05, min(prev['e'] + pad, cw[0]['s'] - 0.02))
+            segs.append([a, e0])
+            out_t += max(0.0, e0 - a)
             a = min(nxt['s'] - 0.05, max(nxt['s'] - pad, cw[-1]['e'] + 0.02))
-        elif nxt['s'] - prev['e'] > gap_max:
-            segs.append([a, prev['e'] + pad]); a = nxt['s'] - pad
-            tightened += 1
-    segs.append([a, min(cfg['end'], kept[-1]['e'] + 0.4)])
+        else:
+            gap = nxt['s'] - prev['e']
+            if gap > _gap_allow(prev, out_t + max(0.0, prev['e'] - a), gap_max):
+                e0 = prev['e'] + pad
+                segs.append([a, e0])
+                out_t += max(0.0, e0 - a)
+                a = nxt['s'] - pad
+                tightened += 1
+            elif gap > gap_max:
+                kept_pauses += 1
+    segs.append([a, min(end, kept[-1]['e'] + tail)])
+    segs = [s for s in segs if s[1] > s[0]]
+    if not segs:
+        return None
+    total = sum(e - s for s, e in segs)
+    return segs, total, {'tightened': tightened, 'kept_pauses': kept_pauses}
+
+
+def predict_duration(transcript, start, end, bleep_words=(), cut_spans=(), gap_max=0.5, pad=0.15):
+    """Finished length this span would deliver, or None. Same maths the renderer uses."""
+    words = words_in_range(transcript, start, end)
+    if not words:
+        return None
+    mark_words(words, bleep_words, cut_spans)
+    plan = plan_segments(words, start, end, gap_max, pad)
+    return None if plan is None else plan[1]
+
+
+def render(cfg):
+    out_path = os.path.abspath(cfg['out'])
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    tmp = tempfile.mkdtemp(dir=os.path.dirname(out_path))
+    try:
+        return _render(cfg, out_path, tmp)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _render(cfg, out_path, tmp):
+    # ---- words in range, marked for cutting (same helpers the engine predicts with)
+    words = words_in_range(cfg['transcript'], cfg['start'], cfg['end'])
+    if not words:
+        raise ValueError('no words in clip range')
+    mark_words(words, cfg.get('bleep_words', []), cfg.get('cut_spans', []), cfg.get('cut_fillers', True))
+
+    # ---- keep-segments: drop cut words, tighten dead air, leave the pauses that do work
+    gap_max, pad = cfg.get('gap_max', 0.5), cfg.get('gap_pad', 0.15)
+    plan = plan_segments(words, cfg['start'], cfg['end'], gap_max, pad)
+    if plan is None:
+        raise ValueError('clip has too few words left after redaction')
+    segs, _, stats = plan
+    tightened, kept_pauses = stats['tightened'], stats['kept_pauses']
     # counts for the clip sheet, taken before `words` is narrowed to the survivors
     n_filler = sum(1 for w in words if w['cut'] and w.get('why') == 'filler')
     n_redact = sum(1 for w in words if w['cut'] and w.get('why') in ('redaction', 'name'))
-    words = kept
+    words = [w for w in words if not w['cut']]
     A0 = segs[0][0]
     A1 = segs[-1][1]
 
@@ -187,7 +251,13 @@ def _render(cfg, out_path, tmp):
         if w['bleep']:
             i0, i1 = max(0, int((w['s'] - 0.04 - A0) * SR)), min(len(aud), int((w['e'] + 0.04 - A0) * SR))
             t = np.arange(i1 - i0) / SR
-            aud[i0:i1] = 0.25 * np.sin(2 * np.pi * 1000 * t)
+            tone = BLEEP_LEVEL * np.sin(2 * np.pi * 1000 * t)
+            # ease the tone in and out: a hard-edged sine is half of what makes a bleep grating
+            r = int(min(0.008 * SR, len(tone) // 2))
+            if r > 1:
+                tone[:r] *= np.linspace(0, 1, r)
+                tone[-r:] *= np.linspace(1, 0, r)
+            aud[i0:i1] = tone
     F = int(0.01 * SR); ramp = np.linspace(0, 1, F, dtype=np.float32)
     parts = []
     for s0, e0 in segs:
@@ -245,7 +315,9 @@ Style: Hook,{font},66,{hook_text},{hook_text},{hook_box},{hook_box},-1,0,0,0,100
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     if cfg.get('hook'):
-        ass += f"Dialogue: 1,{_ts(0)},{_ts(total)},Hook,,0,0,0,,{cfg['hook'].upper()}\n"
+        hook_end = min(float(cfg.get('hook_seconds', HOOK_SECONDS)), total)
+        ass += (f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,"
+                f"{{\\fad(0,350)}}{cfg['hook'].upper()}\n")
     for i, c in enumerate(cards):
         s = to_out(c[0][0]['s'])
         e = to_out(cards[i + 1][0][0]['s']) if i + 1 < len(cards) else total
@@ -272,7 +344,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     return {'out': out_path, 'duration': total, 'caption_text': caption_text,
             'bleeps': sum(w['bleep'] for w in words), 'cuts': len(segs) - 1,
             'picked': float(cfg['end']) - float(cfg['start']),
-            'fillers': n_filler, 'redacted': n_redact, 'tightened': tightened}
+            'fillers': n_filler, 'redacted': n_redact, 'tightened': tightened,
+            'kept_pauses': kept_pauses}
 
 
 if __name__ == '__main__':

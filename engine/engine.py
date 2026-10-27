@@ -15,7 +15,7 @@ import requests
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from render import render  # noqa: E402
+from render import render, predict_duration  # noqa: E402
 try:                                    # a missing reportlab must never take the whole engine down;
     import caption_pdf                  # without it every clip still ships, with a .txt caption
 except Exception as _ex:                # noqa: E402
@@ -311,31 +311,176 @@ def claude(system, user, max_tokens=4000):
     return json.loads(m.group(0))
 
 
-def pick_clips(transcript, agent_name):
+CLIP_MIN, CLIP_MAX = 20.0, 90.0          # finished length, after every cut has been made
+
+
+def map_moments(transcript, agent_name):
+    """Pass 1 - read the whole call and mark every moment worth studying, typed and scored.
+
+    Deliberately NOT asked to produce finished clips: picking and framing are different jobs, and the old
+    single pass did both badly. Nothing here biases toward the agent talking - an objection handled is only
+    teachable if you can hear the objection."""
     lines = [f"[{sg['start']:.1f}-{sg['end']:.1f}] {sg['text'].strip()}" for sg in transcript]
-    system = f"""You edit recorded life-insurance sales calls into short Instagram Reels for OTHER AGENTS to learn from.
-The person on the call is agent {agent_name}; the other voice is a client. Output strict JSON only.
+    system = f"""You are a sales coach reviewing a recorded life-insurance call so OTHER AGENTS can learn from it.
+The agent is {agent_name}; the other voice is the client. Output strict JSON only.
 
-Pick 3 to 5 clips, each 30 to 60 seconds, that are real teachable moments for agents: openers, discovery
-questions, handling objections, closing, building rapport. Each clip must start and end on complete sentences
-and must be self-contained. Prefer stretches where the agent is talking.
+Find up to 8 moments that would genuinely teach another agent something. For each:
+  kind   - one of: opener, discovery, objection, close, rapport
+  score  - 1-10, how much an agent would actually learn. Be harsh. 9-10 is worth copying word for word,
+           5 is ordinary, below 5 is not worth posting.
+  start  - where the moment begins INCLUDING its setup. If the agent is answering an objection or a
+           question, the moment starts with the CLIENT saying it, never with the agent's reply.
+  end    - where the thought is finished. Never end mid-thought.
+  title  - 6 words or fewer: what the moment is.
+  why    - 1-2 plain sentences addressed to the agent as "you": what you did, and why it worked.
 
-NEVER choose a stretch that is mostly health questions, carrier/company talk, or personal/financial details.
+A moment lasts as long as it needs. A single sharp line may be 20 seconds; an objection handled from
+start to finish may be 90. Do not pad to fill time and do not cut a thought short to hit a number.
+Skip anything mostly made of health questions, carrier talk, or personal or financial details.
 
-Also list EVERY word or phrase anywhere inside your chosen clips that matches this list:
+JSON: {{"moments":[{{"kind":"...","score":0,"start":0,"end":0,"title":"...","why":"..."}}]}}"""
+    j = claude(system, 'Transcript with [start-end] seconds per line:\n\n' + '\n'.join(lines), 4000)
+    out = []
+    for m in j.get('moments', []):
+        if not isinstance(m, dict):
+            continue
+        try:
+            m['start'], m['end'] = float(m['start']), float(m['end'])
+            m['score'] = float(m.get('score', 0))
+        except (TypeError, ValueError, KeyError):
+            continue
+        m['kind'] = str(m.get('kind', '')).lower().strip() or 'other'
+        if m['end'] > m['start']:
+            out.append(m)
+    return out
+
+
+MIN_SCORE = 5.0                          # the picker's own scale: below 5 is not worth posting
+
+
+def choose_moments(moments, limit=5):
+    """Best first - but not five versions of the same lesson. Every kind gets a slot before any repeats.
+
+    Variety never reaches below the quality floor: a weak moment of a missing kind is worse than a second
+    strong one of a kind already covered."""
+    ranked = sorted([m for m in moments if m['score'] >= MIN_SCORE], key=lambda m: -m['score'])
+    picked, kinds = [], set()
+    for m in ranked:
+        if len(picked) >= limit:
+            break
+        if m['kind'] not in kinds:
+            picked.append(m)
+            kinds.add(m['kind'])
+    for m in ranked:
+        if len(picked) >= limit:
+            break
+        if not any(m is p for p in picked):
+            picked.append(m)
+    return sorted(picked, key=lambda m: -m['score'])
+
+
+def sentence_bounds(transcript, a_min, a_max):
+    """[(start, end)] per sentence. Clip edges snap to these, so a clip can never end mid-word."""
+    ws = [w for sg in transcript for w in sg['words'] if w['s'] >= a_min and w['e'] <= a_max]
+    sents, cur = [], []
+    for w in ws:
+        cur.append(w)
+        if re.search(r'[.?!]["\')]?$', str(w['w']).strip()):
+            sents.append(cur)
+            cur = []
+    if cur:
+        sents.append(cur)
+    bounds = [(s[0]['s'], s[-1]['e']) for s in sents if s]
+    if len(bounds) < 2 and len(ws) > 30:
+        # Whisper occasionally returns a stretch with no end punctuation at all. Rather than fail the
+        # call, fall back to breaking on the pauses - speakers stop at the end of a thought.
+        bounds, cur = [], []
+        for n, w in enumerate(ws):
+            cur.append(w)
+            nxt = ws[n + 1] if n + 1 < len(ws) else None
+            if nxt is None or nxt['s'] - w['e'] > 0.6:
+                bounds.append((cur[0]['s'], cur[-1]['e']))
+                cur = []
+        if cur:
+            bounds.append((cur[0]['s'], cur[-1]['e']))
+    return bounds
+
+
+def fit_span(sents, start, end, predict, lo=CLIP_MIN, hi=CLIP_MAX):
+    """Snap to whole sentences, then grow or shrink until the FINISHED length lands in range.
+
+    This is the fix for clips arriving short. The renderer only ever removes time - pauses, fillers,
+    redactions - so a span chosen by how it reads always delivers less than it looks like. Here the span
+    is sized by what it will actually become, measured with the renderer's own maths."""
+    if not sents:
+        return None
+    i = min(range(len(sents)), key=lambda k: abs(sents[k][0] - start))
+    j = min(range(len(sents)), key=lambda k: abs(sents[k][1] - end))
+    j = max(i, j)
+    best = None
+    for _ in range(60):
+        s, e = sents[i][0], sents[j][1]
+        d = predict(s, e)
+        if d is None:                       # too little left to judge - widen if we can
+            if j + 1 < len(sents):
+                j += 1
+            elif i > 0:
+                i -= 1
+            else:
+                return None
+            continue
+        best = (s, e, d)
+        if d < lo:
+            if j + 1 < len(sents):
+                j += 1                      # grow forward first: the payoff usually follows
+            elif i > 0:
+                i -= 1
+            else:
+                break
+        elif d > hi:
+            if j > i:
+                j -= 1
+            else:
+                break
+        else:
+            return s, e, d
+    return best
+
+
+def caption_and_redact(transcript, spans, agent_name):
+    """Pass 2 - banner, caption and the exhaustive redaction list for the spans we are actually cutting."""
+    blocks = []
+    for n, (s, e) in enumerate(spans, 1):
+        txt = ' '.join(sg['text'].strip() for sg in transcript if sg['end'] > s and sg['start'] < e)
+        blocks.append(f'--- CLIP {n} ({e - s:.0f}s of call time) ---\n{txt}')
+    system = f"""You write Instagram Reels copy for life-insurance agents, and you are also the compliance
+screen. The agent is {agent_name}; the other voice is the client. Output strict JSON only.
+
+For each clip give:
+  n          - the clip number
+  hook       - 6 words or fewer, burned on screen for the first seconds. It must make an agent stop
+               scrolling: the tension or the lesson, never a label like "Objection handling".
+  ig_caption - 2-3 sentences to another agent, then exactly 3 hashtags. No income claims, no carrier names.
+
+Then, across ALL clips, list EVERY word or phrase matching this list:
 {PROHIBITED}
 
-JSON shape:
-{{"clips":[{{"start":<sec>,"end":<sec>,"hook":"<=6 words, banner text","ig_caption":"2-3 sentence Instagram caption + 3 hashtags","why":"1-2 plain sentences for the agent: what makes this moment worth studying, and why this is where it starts and ends. Speak to the agent as 'you'. No jargon."}}],
+JSON: {{"clips":[{{"n":1,"hook":"...","ig_caption":"..."}}],
  "client_names":["<first name>","<last name>","<spouse/family names>"],
- "redactions":[{{"text":"<exact words as they appear in the transcript>","type":"health|carrier|location|contact|financial|name"}}]}}
+ "redactions":[{{"text":"<exact words as they appear above>","type":"health|carrier|location|contact|financial|name"}}]}}
 
 client_names are the client's and their family's names (bleeped on first mention, cut afterwards).
-Every other redaction is removed from the audio and captions. Be exhaustive; missing one is a compliance failure."""
-    user = 'Transcript with [start-end] seconds per line:\n\n' + '\n'.join(lines)
-    j = claude(system, user, 6000)
-    clips = [c for c in j.get('clips', []) if isinstance(c, dict) and 20 <= float(c['end']) - float(c['start']) <= 75]
-    return clips[:5], [str(n) for n in j.get('client_names', []) if n], j.get('redactions', [])
+Every other redaction is removed from the audio and the captions. Be exhaustive; missing one is a
+compliance failure."""
+    j = claude(system, '\n\n'.join(blocks), 6000)
+    by_n = {}
+    for c in j.get('clips', []):
+        if isinstance(c, dict):
+            try:
+                by_n[int(c.get('n', 0))] = c
+            except (TypeError, ValueError):
+                continue
+    return by_n, [str(n) for n in j.get('client_names', []) if n], j.get('redactions', [])
 
 
 def compliance_check(caption_text, hook):
@@ -433,12 +578,63 @@ def process(call):
             api('engineProblem', callId=cid, notifyAgent=True, reason='The part of the call that has video was too short or too quiet to transcribe.')
             return
 
-        log.info('%s: picking clips', cid)
-        clips, names, redactions = pick_clips(usable, call.get('display_name', 'the agent'))
-        clips = [c for c in clips if float(c['start']) >= a_min and float(c['end']) <= a_max]
+        agent_name = call.get('display_name', 'the agent')
+        log.info('%s: mapping the call', cid)
+        moments = [m for m in map_moments(usable, agent_name) if m['end'] > a_min and m['start'] < a_max]
+        chosen = choose_moments(moments, 5)
+        log.info('%s: %d moments found, %d chosen (%s)', cid, len(moments), len(chosen),
+                 ', '.join('%s %.0f' % (m['kind'], m['score']) for m in chosen) or 'none')
+        if not chosen:
+            if fid_full:
+                api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest)
+                log.info('%s: no teachable moment found; full synced video delivered', cid)
+            else:
+                api('engineProblem', callId=cid, reason='No teachable moment was found in the part of the call that has video.')
+            return
+
+        # size each moment by what it will BE after cutting, not by how the transcript reads
+        sents = sentence_bounds(transcript, a_min, a_max)
+        rough = []
+        for m in chosen:
+            fit = fit_span(sents, m['start'], m['end'],
+                           lambda s, e: predict_duration(transcript, s, e, (), ()))
+            if fit:
+                rough.append((m, fit[0], fit[1]))
+                log.info('%s: "%s" %.0f-%.0f -> %.0f-%.0f (~%.0fs)', cid, m.get('title', '')[:40],
+                         m['start'], m['end'], fit[0], fit[1], fit[2])
+            else:
+                dropped.append('%s: could not be framed into a clip' % str(m.get('title', 'moment'))[:40])
+        if not rough:
+            api('engineProblem', callId=cid, reason='Nothing could be framed into a clip.\n' + '\n'.join(dropped))
+            return
+
+        # pass 2 screens a wider window than each clip, so a later re-fit can still grow into vetted text
+        PAD_SENTS = 3
+        screens = []
+        for _m, s0, e0 in rough:
+            i0 = max(0, min(range(len(sents)), key=lambda k: abs(sents[k][0] - s0)) - PAD_SENTS)
+            j0 = min(len(sents) - 1, min(range(len(sents)), key=lambda k: abs(sents[k][1] - e0)) + PAD_SENTS)
+            screens.append((sents[i0][0], sents[j0][1], i0, j0))
+        log.info('%s: writing hooks, captions and redactions', cid)
+        copy_by_n, names, redactions = caption_and_redact(usable, [(s, e) for s, e, _, _ in screens], agent_name)
         cut_spans = redaction_spans(transcript, redactions)
         name_keys = sorted({_norm(n) for n in names if len(_norm(n)) >= 3})
-        log.info('%s: %d clips, %d name keys, %d cut spans', cid, len(clips), len(name_keys), len(cut_spans))
+        log.info('%s: %d name keys, %d cut spans', cid, len(name_keys), len(cut_spans))
+
+        # re-fit now that the real cuts are known, staying inside the screened sentences
+        clips = []
+        for n, (m, s0, e0) in enumerate(rough, 1):
+            _, _, i0, j0 = screens[n - 1]
+            fit = fit_span(sents[i0:j0 + 1], s0, e0,
+                           lambda s, e: predict_duration(transcript, s, e, name_keys, cut_spans))
+            if not fit:
+                dropped.append('%s: nothing left after compliance cuts' % str(m.get('title', 'moment'))[:40])
+                continue
+            copy = copy_by_n.get(n, {})
+            clips.append({'start': fit[0], 'end': fit[1], 'rank': len(clips) + 1, 'kind': m.get('kind', ''),
+                          'hook': copy.get('hook') or m.get('title', 'Clip %d' % n),
+                          'ig_caption': copy.get('ig_caption', ''), 'why': m.get('why', ''),
+                          'score': m.get('score', 0)})
 
         for i, c in enumerate(clips, 1):
             hook = re.sub(r'[\\/:*?"<>|]', '', str(c.get('hook', f'Clip {i}')).strip())[:60] or f'Clip {i}'
@@ -449,7 +645,7 @@ def process(call):
                               'bleep_words': name_keys, 'cut_spans': cut_spans, 'gap_max': 0.5, 'gap_pad': 0.15, 'style': style})
             except Exception as ex:
                 log.warning('%s: clip %d render failed: %s', cid, i, ex); dropped.append(f'{hook}: render failed'); continue
-            if not 20 <= res['duration'] <= 75:
+            if not CLIP_MIN <= res['duration'] <= CLIP_MAX:
                 dropped.append(f'{hook}: {res["duration"]:.0f}s after trimming'); continue
             chk = compliance_check(res['caption_text'], hook)
             if chk.get('flagged') or chk.get('unsure'):
@@ -470,7 +666,9 @@ def process(call):
                     'out': os.path.join(d, 'out', f'clip{i}.pdf'), 'clip': out, 'hook': hook,
                     'caption': caption, 'why': str(c.get('why', '')).strip(),
                     'agent': call.get('display_name', ''), 'when': stamp, 'duration': res['duration'],
-                    'edits': {k: res.get(k) for k in ('picked', 'fillers', 'tightened', 'bleeps', 'redacted')}})
+                    'rank': c.get('rank'), 'kind': c.get('kind'), 'of': len(clips),
+                    'edits': {k: res.get(k) for k in ('picked', 'fillers', 'tightened', 'bleeps',
+                                                      'redacted', 'kept_pauses')}})
                 drive_upload(pdf, name + '.pdf', dest, 'application/pdf')
             except Exception as ex:                                # never lose the caption over a PDF problem
                 log.warning('%s: clip sheet failed (%s); delivering the caption as text', cid, ex)

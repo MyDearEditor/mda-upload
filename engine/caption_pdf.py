@@ -114,8 +114,12 @@ def _edit_notes(edits, duration):
                      % (n, 'word' if n == 1 else 'words'))
     if e.get('tightened'):
         n = e['tightened']
-        notes.append('Shortened %d long %s. Natural pauses stay; dead air goes.'
+        notes.append('Shortened %d long %s, and cut the silence tight in the opening seconds where it costs you views.'
                      % (n, 'silence' if n == 1 else 'silences'))
+    if e.get('kept_pauses'):
+        n = e['kept_pauses']
+        notes.append('Left %d %s standing where it was doing work - the beat after a question or a close is '
+                     'the part other agents need to hear.' % (n, 'pause' if n == 1 else 'pauses'))
     if e.get('bleeps'):
         notes.append('Bleeped the client\'s name on first mention and cut every mention after it.')
     if e.get('redacted'):
@@ -162,7 +166,20 @@ def _build(cfg, out, tmp):
 
     c.setFont(F['bold'], 9)
     c.setFillColor(BORDER)
-    c.drawString(M, H - 36, 'MYDEAR.EDITOR  //  CLIP SHEET')
+    rank, of, kind = cfg.get('rank'), cfg.get('of'), _plain(cfg.get('kind') or '', 20)
+    label = 'MYDEAR.EDITOR  //  CLIP SHEET'
+    if rank:
+        label += '  //  CLIP %d OF %s' % (rank, of or '?')
+    if kind:
+        label += '  //  %s' % kind.upper()
+    c.drawString(M, H - 36, label)
+    if rank == 1:                                    # the one to post first, said where it is seen
+        tag = 'POST THIS ONE FIRST'
+        tw = c.stringWidth(tag, F['bold'], 9)
+        c.setFillColor(GOLD)
+        c.roundRect(W - M - tw - 18, H - 42, tw + 18, 19, 4, stroke=0, fill=1)
+        c.setFillColor(PANEL)
+        c.drawString(W - M - tw - 9, H - 36, tag)
     c.setFont(F['title'], 29)
     c.setFillColor(white)
     title = hook.upper()
