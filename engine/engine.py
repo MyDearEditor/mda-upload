@@ -421,9 +421,10 @@ def sync_problem(detail, offset, vdur, adur):
         out.append('At the closest match we could find, only about %s of the call was on camera.' % mmss(overlap))
 
     if adur < 180 or adur < vdur * 0.4:
-        out.append('The recording is much shorter than the video. If your dialer only captured part of '
-                   'the call, there is not enough of it to match against — check whether a longer '
-                   'recording of this call exists before re-uploading.')
+        out.append('The recording is much shorter than the video. That is usually one of two things: your '
+                   'dialer only caught part of the call, or the camera was rolling for a long time before '
+                   'the call began. Anything filmed before the call starts cannot be matched or used, so '
+                   'start recording when you dial.')
     elif vdur < adur * 0.4:
         out.append('The video is much shorter than the recording. If you only filmed part of the call, '
                    'there may not be enough footage to work with.')
