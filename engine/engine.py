@@ -392,6 +392,48 @@ def agent_turns(transcript, start, end, join=0.8):
     return [(max(start, s), min(end, e)) for s, e in turns if min(end, e) > max(start, s)]
 
 
+def mmss(seconds):
+    s = int(round(max(0.0, float(seconds))))
+    return '%d:%02d' % (s // 60, s % 60)
+
+
+def sync_problem(detail, offset, vdur, adur):
+    """Say what is actually wrong with the pair, not just that it would not line up.
+
+    'Please re-upload the matching pair' sends an agent looking for a file that is usually not the
+    problem. Far more often one of the two recordings is short - the dialer caught the tail of the
+    call, or the camera was only rolling for part of it - and no amount of re-uploading fixes that.
+    """
+    if 'no usable audio' in detail:
+        return ('Your phone video has no usable audio track. We line the two files up by their sound, '
+                'so we need to be able to hear you on the video as well as on the call recording. '
+                'Please check the video and upload again.')
+    if 'is silent' in detail:
+        return ('Your call recording is silent. We need sound in both files to line them up — please '
+                'check the recording and upload again.')
+
+    out = ['We could not line your call recording up with your phone video.',
+           'Your video is %s long and your call recording is %s.' % (mmss(vdur), mmss(adur))]
+    overlap = min(adur, vdur - offset) - max(0.0, -offset)
+    if overlap <= 5:
+        out.append('At the closest match we could find, the two barely overlap at all.')
+    elif overlap < adur * 0.9:
+        out.append('At the closest match we could find, only about %s of the call was on camera.' % mmss(overlap))
+
+    if adur < 180 or adur < vdur * 0.4:
+        out.append('The recording is much shorter than the video. If your dialer only captured part of '
+                   'the call, there is not enough of it to match against — check whether a longer '
+                   'recording of this call exists before re-uploading.')
+    elif vdur < adur * 0.4:
+        out.append('The video is much shorter than the recording. If you only filmed part of the call, '
+                   'there may not be enough footage to work with.')
+    else:
+        out.append('They look like two different calls. Please check that both files are from the same '
+                   'call and upload again.')
+    out.append('(technical detail: %s)' % detail)
+    return '\n'.join(out)
+
+
 def transcribe(audio, out_json, t0=0.0, t1=None):
     """Transcribe audio between t0 and t1 (seconds of the call recording). Timestamps are in full-call time."""
     from faster_whisper import WhisperModel
@@ -643,23 +685,26 @@ def process(call):
 
         log.info('%s: syncing', cid)
         offset, conf, detail = sync_offset(video, audio, d)
-        log.info('%s: offset %.3f confidence %.1f (%s)', cid, offset, conf, detail)
+        vdur = media_duration(video)
+        adur = media_duration(audio)
+        log.info('%s: offset %.3f confidence %.1f (%s) | video %s, recording %s',
+                 cid, offset, conf, detail, mmss(vdur), mmss(adur))
         if conf < MIN_SYNC_CONFIDENCE:
-            if 'no usable audio' in detail or 'is silent' in detail:
-                reason = f'Your {"phone video has no usable audio track" if "video" in detail else "call recording is silent"}. We need sound in both files to line them up — please check the recording and upload again.'
-            else:
-                reason = f'The call recording did not match the phone video (sync {detail}). Please re-upload the matching pair.'
-            api('engineProblem', callId=cid, notifyAgent=True, reason=reason)
+            api('engineProblem', callId=cid, notifyAgent=True,
+                reason=sync_problem(detail, offset, vdur, adur))
             return
 
         # RULE: edit only where there is video. Audio t = video t - offset, so the usable call window is:
-        vdur = media_duration(video)
-        adur = media_duration(audio)
         a_min = max(0.0, -offset) + 0.5
         a_max = min(adur, vdur - offset) - 0.5
         log.info('%s: video %.0fs, recording %.0fs, usable window %.1f-%.1f s (%.0fs)', cid, vdur, adur, a_min, a_max, a_max - a_min)
         if a_max - a_min < 45:
-            api('engineProblem', callId=cid, notifyAgent=True, reason='The video and the call recording barely overlap (less than 45 seconds). Please upload the video and recording of the same call.')
+            api('engineProblem', callId=cid, notifyAgent=True,
+                reason=('The two files lined up, but only %s of the call was actually on camera, which is '
+                        'not enough to cut anything from.\nYour video is %s long and your call recording '
+                        'is %s.\nFilm from the start of the call, and check your dialer captured the whole '
+                        'thing, then upload again.'
+                        % (mmss(max(0.0, a_max - a_min)), mmss(vdur), mmss(adur))))
             return
 
         mode = call.get('mode') or 'clips'
