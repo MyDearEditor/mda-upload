@@ -391,3 +391,11 @@ input[type="color"] { height: 48px; padding: 4px; cursor: pointer; }
 .g-list.tips li::before { content: '★'; color: var(--gold); }
 .g-foot { margin-top: 16px; padding-top: 12px; border-top: var(--pixel) solid var(--border-dark);
   font-family: var(--font-pixel); font-size: 8px; line-height: 1.8; color: var(--gold); text-align: center; }
+
+/* the guide button stands apart from the rest of the nav so agents find it */
+.navbtn.guide { color: #06240f; background: linear-gradient(180deg, #8ffcb4 0%, var(--ok) 100%);
+  border-color: #d6ffe8; box-shadow: 0 3px 0 #1f7a46; text-shadow: none;
+  animation: guidePulse 2.4s ease-in-out infinite; }
+.navbtn.guide:hover { filter: brightness(1.08); }
+.navbtn.guide.active { animation: none; color: #2a1200; background: var(--gold-2); border-color: var(--border); box-shadow: none; }
+@keyframes guidePulse { 50% { box-shadow: 0 3px 0 #1f7a46, 0 0 13px rgba(108,245,154,.9); } }
