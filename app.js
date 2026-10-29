@@ -182,6 +182,7 @@
     var on = !!(session && session.expires > Date.now());
     if (!on) session = null;
     $('nav').classList.toggle('hidden', !on);
+    $('guide-cta').classList.toggle('hidden', !on);
     if (!on) return show('gate1');
     $('who').textContent = session.display_name;
     var admin = !!session.admin;

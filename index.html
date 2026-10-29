@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
@@ -27,6 +27,7 @@
 <button class="mute eagles" id="eagles-btn" title="Eagles on/off" aria-label="Eagles on/off">🦅</button>
 <button class="mute" id="mute" title="Sound on/off" aria-label="Sound on/off">🔊</button>
 <header class="top">
+  <div class="hud-stack">
   <div class="hud" id="hud">
     <div class="avatar"></div>
     <div class="hud-text">
@@ -34,12 +35,13 @@
       <div class="hearts" aria-hidden="true"><span>♥</span><span>♥</span><span>♥</span></div>
     </div>
   </div>
+  <button data-view="guide" class="navbtn guide-cta hidden" id="guide-cta">&#11088; HOW WE EDIT</button>
+  </div>
   <h1 class="wordmark"><img src="assets/wordmark.png" alt="MyDear.Editor"></h1>
   <nav id="nav" class="nav hidden">
     <button data-view="upload" class="navbtn active">Upload</button>
     <button data-view="mine" class="navbtn">My uploads</button>
     <button data-view="style" class="navbtn">My style</button>
-    <button data-view="guide" class="navbtn guide">How we edit</button>
     <button data-view="admin" class="navbtn admin-only hidden">Admin</button>
     <button id="logout" class="navbtn ghost">Sign out</button>
     <span class="who" id="who"></span>
@@ -215,18 +217,55 @@
   <section id="view-guide" class="view hidden">
     <div class="panel glass guide">
       <div class="panel-title">▶ HOW WE EDIT</div>
-      <p class="sub">Everything your calls turn into, and how long it takes. Read it once and you'll know what to expect.</p>
+      <p class="sub g-intro">Your call goes in. Ready-to-post Reels come out. Here's the whole game in one page.</p>
 
-      <div class="g-head">◆ THE SIX CLIP TYPES ◆</div>
-      <p class="g-note">Every clip we cut is one of these. Most calls give us three to five. We never post five of the same kind — you get a spread.</p>
+      <div class="g-head">◆ THE SIX CLIP CARDS ◆</div>
+      <p class="g-note">Every clip you get back is one of these. Most calls drop <b>3 to 5 cards</b> — and never five of the same kind.</p>
       <div class="g-cards">
-        <div class="g-card"><div class="g-ico">🎣</div><div class="g-name">OPENER</div><div class="g-desc">How you get them to stay on the phone. The first few lines that stop a hang-up.</div></div>
-        <div class="g-card"><div class="g-ico">🔍</div><div class="g-name">DISCOVERY</div><div class="g-desc">The question that gets them talking about why they really picked up.</div></div>
-        <div class="g-card"><div class="g-ico">🛡️</div><div class="g-name">OBJECTION</div><div class="g-desc">They push back, you handle it. Always starts with <b>them</b> saying it, so the answer makes sense.</div></div>
-        <div class="g-card"><div class="g-ico">🏁</div><div class="g-name">CLOSE</div><div class="g-desc">Asking for the business, and what you do in the silence afterwards.</div></div>
-        <div class="g-card"><div class="g-ico">🤝</div><div class="g-name">RAPPORT</div><div class="g-desc">The moment they stop treating you like a salesperson.</div></div>
-        <div class="g-card rare"><div class="g-ico">😂</div><div class="g-name">FUNNY <span class="g-rare">RARE</span></div><div class="g-desc">A call going sideways in a way other agents will recognise. Most calls have none — that's normal.</div></div>
+        <div class="g-card c-open">
+          <div class="gc-top"><span class="gc-name">OPENER</span><span class="gc-lv">RANKS 5+</span></div>
+          <div class="gc-art"><span class="gc-emoji">🎣</span></div>
+          <div class="gc-type">MOMENT · CALL START</div>
+          <div class="gc-text">The first few lines that stop a hang-up and buy you the rest of the call.</div>
+          <div class="gc-foot"><span>◆ CORE DROP</span><span>20–90s</span></div>
+        </div>
+        <div class="g-card c-disc">
+          <div class="gc-top"><span class="gc-name">DISCOVERY</span><span class="gc-lv">RANKS 5+</span></div>
+          <div class="gc-art"><span class="gc-emoji">🔍</span></div>
+          <div class="gc-type">MOMENT · THE RIGHT QUESTION</div>
+          <div class="gc-text">The question that gets them talking about why they really picked up.</div>
+          <div class="gc-foot"><span>◆ CORE DROP</span><span>20–90s</span></div>
+        </div>
+        <div class="g-card c-obj">
+          <div class="gc-top"><span class="gc-name">OBJECTION</span><span class="gc-lv">RANKS 5+</span></div>
+          <div class="gc-art"><span class="gc-emoji">🛡️</span></div>
+          <div class="gc-type">MOMENT · THE PUSHBACK</div>
+          <div class="gc-text">They push back, you handle it. Always starts with <b>them</b> saying it.</div>
+          <div class="gc-foot"><span>◆ CORE DROP</span><span>20–90s</span></div>
+        </div>
+        <div class="g-card c-close">
+          <div class="gc-top"><span class="gc-name">CLOSE</span><span class="gc-lv">RANKS 5+</span></div>
+          <div class="gc-art"><span class="gc-emoji">🏁</span></div>
+          <div class="gc-type">MOMENT · THE ASK</div>
+          <div class="gc-text">Asking for the business — and the silence you let sit afterwards.</div>
+          <div class="gc-foot"><span>◆ CORE DROP</span><span>20–90s</span></div>
+        </div>
+        <div class="g-card c-rap">
+          <div class="gc-top"><span class="gc-name">RAPPORT</span><span class="gc-lv">RANKS 5+</span></div>
+          <div class="gc-art"><span class="gc-emoji">🤝</span></div>
+          <div class="gc-type">MOMENT · THE TRUST</div>
+          <div class="gc-text">The moment they stop treating you like a salesperson.</div>
+          <div class="gc-foot"><span>◆ CORE DROP</span><span>20–90s</span></div>
+        </div>
+        <div class="g-card c-funny rare">
+          <div class="gc-top"><span class="gc-name">FUNNY</span><span class="gc-lv">RANKS 7+</span></div>
+          <div class="gc-art"><span class="gc-emoji">😂</span></div>
+          <div class="gc-type">MOMENT · THE CHAOS</div>
+          <div class="gc-text">Every agent has had this exact call. Most calls drop none — that's what makes it rare.</div>
+          <div class="gc-foot"><span class="gold">★ LEGENDARY</span><span>20–90s</span></div>
+        </div>
       </div>
+      <p class="g-note g-cards-note">RANKS 5+ means a moment has to score at least 5 out of 10 to make the cut. A FUNNY card has to hit <b>7</b> — it only drops when it would genuinely make another agent laugh.</p>
 
       <div class="g-head">◆ YOUR LOADOUT ◆</div>
       <div class="g-stats">
@@ -235,34 +274,54 @@
         <div class="g-stat"><div class="g-val">15 GB</div><div class="g-lbl">MAX PER FILE</div></div>
         <div class="g-stat"><div class="g-val">+1</div><div class="g-lbl">FULL CALL VIDEO</div></div>
       </div>
-      <p class="g-note">Clips run as long as the moment needs — a sharp line might be 20 seconds, a whole objection handled start to finish might be 90. You also get your <b>full call video</b> with the clean phone-call audio dropped in, so you can cut your own if you want. Every clip comes with a <b>one-page clip sheet</b>: a thumbnail, a caption ready to copy and paste, and a plain-English note on why it was cut that way.</p>
 
-      <div class="g-head">◆ HOW LONG IT TAKES ◆</div>
-      <div class="g-bars">
-        <div class="g-bar"><div class="g-bar-lbl">UPLOADING</div><div class="g-bar-track"><div class="g-bar-fill up"></div></div><div class="g-bar-val">~8 min per GB</div></div>
-        <div class="g-bar"><div class="g-bar-lbl">EDITING</div><div class="g-bar-track"><div class="g-bar-fill ed"></div></div><div class="g-bar-val">about as long as the call</div></div>
+      <div class="g-head">◆ THE ROAD YOUR CALL TAKES ◆</div>
+      <div class="g-map">
+        <div class="stage">
+          <div class="stage-badge">1</div>
+          <div class="stage-box">
+            <div class="stage-name">🎬 FILM YOUR CALL</div>
+            <p>Hit record <b>when you dial</b> — not ten minutes before. Headphones on. Just you in the shot.</p>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="stage-badge">2</div>
+          <div class="stage-box">
+            <div class="stage-name">📤 UPLOAD BOTH FILES</div>
+            <p>Your video + the call recording, up to <b>15 GB</b> each. Keep the page open — figure about <b>8 minutes per GB</b> on normal wifi.</p>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="stage-badge">3</div>
+          <div class="stage-box">
+            <div class="stage-name">✂️ WE EDIT</div>
+            <p>Takes about <b>as long as the call itself</b> — a 15-minute call is roughly 12 minutes of editing. While you sell, we:</p>
+            <div class="stage-chips"><span>UMS CUT</span><span>DEAD AIR GONE</span><span>NAMES BLEEPED</span><span>COMPLIANCE SCRUBBED</span><span>CAPTIONS BURNED IN</span><span>CHECKED TWICE</span></div>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="stage-badge">4</div>
+          <div class="stage-box">
+            <div class="stage-name">📧 YOU GET AN EMAIL</div>
+            <p>The moment it's done — with a link straight to that call's folder in your Drive.</p>
+          </div>
+        </div>
+        <div class="stage">
+          <div class="stage-badge win">★</div>
+          <div class="stage-box">
+            <div class="stage-name">📱 POST &amp; WIN</div>
+            <p>Every clip comes with a <b>clip sheet</b>: a thumbnail, a caption ready to copy-paste, and why we cut it that way. Post the one marked <b>FIRST</b>.</p>
+          </div>
+        </div>
       </div>
-      <p class="g-note"><b>Uploading</b> depends on your wifi, not on us — a 2 GB video is usually around a quarter of an hour. Keep the page open while it goes up. <b>Editing</b> depends on how long the call was, not how big the file is: a 15-minute call takes us about 12 minutes, a 30-minute call about 25. You get an email the moment it's done, with a link straight to that call's folder.</p>
 
-      <div class="g-head">◆ WHAT WE DO AUTOMATICALLY ◆</div>
-      <ul class="g-list">
-        <li><b>Cut the ums and uhs</b> — and the hedging "like", so your point lands faster.</li>
-        <li><b>Tighten dead air</b> — but we keep the pause after a question. That silence is doing work.</li>
-        <li><b>Bleep the client's name</b> the first time, cut it every time after.</li>
-        <li><b>Strip anything compliance won't allow</b> — carrier names, locations, money details, contact details.</li>
-        <li><b>Burn in captions</b> from your actual words, so it reads with the sound off.</li>
-        <li><b>Check it twice</b> — anything still questionable gets dropped rather than sent to you.</li>
-      </ul>
+      <div class="g-head">◆ POWER-UPS ◆</div>
+      <div class="g-powerups">
+        <div class="pu"><span class="pu-ico">🔎</span><div><b>FLIP THE ZOOM SWITCH</b><p>The camera pushes in while you talk, pulls back for the client. Holds attention.</p></div></div>
+        <div class="pu"><span class="pu-ico">🏷️</span><div><b>NAME YOUR CALL</b><p>That name becomes the folder in your Drive. Future you says thanks.</p></div></div>
+        <div class="pu"><span class="pu-ico">🎨</span><div><b>SAVE YOUR STYLE</b><p>On My Style, press SAVE — clicking a preset only previews it.</p></div></div>
+      </div>
 
-      <div class="g-head">◆ GET A HIGHER SCORE ◆</div>
-      <ul class="g-list tips">
-        <li><b>Wear headphones.</b> Then we can tell your voice from theirs — that's what makes the zoom work.</li>
-        <li><b>Start filming when you dial.</b> Anything recorded before the call starts can't be matched up or used.</li>
-        <li><b>Film only yourself.</b> No screens, quote tools, CRM or paperwork in the shot.</li>
-        <li><b>Name your call</b> on the upload screen. That name becomes the folder in your Drive.</li>
-        <li><b>Flip the zoom switch on.</b> The camera pushes in while you talk and pulls back for the client. It holds attention.</li>
-        <li><b>Save your caption style once</b> on My Style — clicking a preset only previews it.</li>
-      </ul>
       <p class="g-foot">Something came back wrong? Mason has been notified, and we're fixing it now.</p>
     </div>
   </section>
@@ -310,7 +369,7 @@
 </main>
 
 <footer class="foot">MYDEAR ACADEMY</footer>
-<script src="config.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="config.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
