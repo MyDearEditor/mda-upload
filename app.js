@@ -166,7 +166,7 @@
   }
 
   // ---------------------------------------------------------------- views
-  var views = ['gate1', 'gate2', 'join', 'login', 'upload', 'mine', 'style', 'admin'];
+  var views = ['gate1', 'gate2', 'join', 'login', 'upload', 'mine', 'style', 'guide', 'admin'];
   function show(v) {
     views.forEach(function (x) { $('view-' + x).classList.toggle('hidden', x !== v); });
     var el = $('view-' + v); el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter');

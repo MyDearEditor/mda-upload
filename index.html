@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
@@ -39,6 +39,7 @@
     <button data-view="upload" class="navbtn active">Upload</button>
     <button data-view="mine" class="navbtn">My uploads</button>
     <button data-view="style" class="navbtn">My style</button>
+    <button data-view="guide" class="navbtn">Field guide</button>
     <button data-view="admin" class="navbtn admin-only hidden">Admin</button>
     <button id="logout" class="navbtn ghost">Sign out</button>
     <span class="who" id="who"></span>
@@ -207,6 +208,62 @@
           <div class="pv-cap" id="pv-cap">SO WHAT MADE YOU LOOK INTO COVERAGE TODAY</div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- ============ FIELD GUIDE ============ -->
+  <section id="view-guide" class="view hidden">
+    <div class="panel glass guide">
+      <div class="panel-title">▶ FIELD GUIDE</div>
+      <p class="sub">Everything your calls turn into, and how long it takes. Read it once and you'll know what to expect.</p>
+
+      <div class="g-head">◆ THE SIX CLIP TYPES ◆</div>
+      <p class="g-note">Every clip we cut is one of these. Most calls give us three to five. We never post five of the same kind — you get a spread.</p>
+      <div class="g-cards">
+        <div class="g-card"><div class="g-ico">🎣</div><div class="g-name">OPENER</div><div class="g-desc">How you get them to stay on the phone. The first few lines that stop a hang-up.</div></div>
+        <div class="g-card"><div class="g-ico">🔍</div><div class="g-name">DISCOVERY</div><div class="g-desc">The question that gets them talking about why they really picked up.</div></div>
+        <div class="g-card"><div class="g-ico">🛡️</div><div class="g-name">OBJECTION</div><div class="g-desc">They push back, you handle it. Always starts with <b>them</b> saying it, so the answer makes sense.</div></div>
+        <div class="g-card"><div class="g-ico">🏁</div><div class="g-name">CLOSE</div><div class="g-desc">Asking for the business, and what you do in the silence afterwards.</div></div>
+        <div class="g-card"><div class="g-ico">🤝</div><div class="g-name">RAPPORT</div><div class="g-desc">The moment they stop treating you like a salesperson.</div></div>
+        <div class="g-card rare"><div class="g-ico">😂</div><div class="g-name">FUNNY <span class="g-rare">RARE</span></div><div class="g-desc">A call going sideways in a way other agents will recognise. Most calls have none — that's normal.</div></div>
+      </div>
+
+      <div class="g-head">◆ YOUR LOADOUT ◆</div>
+      <div class="g-stats">
+        <div class="g-stat"><div class="g-val">3–5</div><div class="g-lbl">CLIPS PER CALL</div></div>
+        <div class="g-stat"><div class="g-val">20–90s</div><div class="g-lbl">CLIP LENGTH</div></div>
+        <div class="g-stat"><div class="g-val">15 GB</div><div class="g-lbl">MAX PER FILE</div></div>
+        <div class="g-stat"><div class="g-val">+1</div><div class="g-lbl">FULL CALL VIDEO</div></div>
+      </div>
+      <p class="g-note">Clips run as long as the moment needs — a sharp line might be 20 seconds, a whole objection handled start to finish might be 90. You also get your <b>full call video</b> with the clean phone-call audio dropped in, so you can cut your own if you want. Every clip comes with a <b>one-page clip sheet</b>: a thumbnail, a caption ready to copy and paste, and a plain-English note on why it was cut that way.</p>
+
+      <div class="g-head">◆ HOW LONG IT TAKES ◆</div>
+      <div class="g-bars">
+        <div class="g-bar"><div class="g-bar-lbl">UPLOADING</div><div class="g-bar-track"><div class="g-bar-fill up"></div></div><div class="g-bar-val">~8 min per GB</div></div>
+        <div class="g-bar"><div class="g-bar-lbl">EDITING</div><div class="g-bar-track"><div class="g-bar-fill ed"></div></div><div class="g-bar-val">about as long as the call</div></div>
+      </div>
+      <p class="g-note"><b>Uploading</b> depends on your wifi, not on us — a 2 GB video is usually around a quarter of an hour. Keep the page open while it goes up. <b>Editing</b> depends on how long the call was, not how big the file is: a 15-minute call takes us about 12 minutes, a 30-minute call about 25. You get an email the moment it's done, with a link straight to that call's folder.</p>
+
+      <div class="g-head">◆ WHAT WE DO AUTOMATICALLY ◆</div>
+      <ul class="g-list">
+        <li><b>Cut the ums and uhs</b> — and the hedging "like", so your point lands faster.</li>
+        <li><b>Tighten dead air</b> — but we keep the pause after a question. That silence is doing work.</li>
+        <li><b>Bleep the client's name</b> the first time, cut it every time after.</li>
+        <li><b>Strip anything compliance won't allow</b> — carrier names, locations, money details, contact details.</li>
+        <li><b>Burn in captions</b> from your actual words, so it reads with the sound off.</li>
+        <li><b>Check it twice</b> — anything still questionable gets dropped rather than sent to you.</li>
+      </ul>
+
+      <div class="g-head">◆ GET A HIGHER SCORE ◆</div>
+      <ul class="g-list tips">
+        <li><b>Wear headphones.</b> Then we can tell your voice from theirs — that's what makes the zoom work.</li>
+        <li><b>Start filming when you dial.</b> Anything recorded before the call starts can't be matched up or used.</li>
+        <li><b>Film only yourself.</b> No screens, quote tools, CRM or paperwork in the shot.</li>
+        <li><b>Name your call</b> on the upload screen. That name becomes the folder in your Drive.</li>
+        <li><b>Flip the zoom switch on.</b> The camera pushes in while you talk and pulls back for the client. It holds attention.</li>
+        <li><b>Save your caption style once</b> on My Style — clicking a preset only previews it.</li>
+      </ul>
+      <p class="g-foot">Stuck, or something came back wrong? Send Mason the call name and he'll take a look.</p>
     </div>
   </section>
 

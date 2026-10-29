@@ -339,3 +339,55 @@ input[type="color"] { height: 48px; padding: 4px; cursor: pointer; }
 .stats-note { font-size: 13px; color: var(--text-dim); margin: 10px 2px 0; line-height: 1.4; }
 .ubar { position: relative; height: 10px; background: rgba(0,0,0,.35); border: 1px solid var(--border); margin-top: 6px; max-width: 420px; }
 .ubar i { position: absolute; inset: 0 auto 0 0; background: repeating-linear-gradient(90deg, var(--gold) 0 8px, var(--gold-2) 8px 16px); }
+
+/* ---------- field guide ---------- */
+.guide { max-width: 940px; }
+.g-head { font-family: var(--font-pixel); font-size: 11px; color: var(--gold); letter-spacing: 1px; text-align: center;
+  margin: 26px 0 10px; text-shadow: 2px 2px 0 var(--border-dark); }
+.g-note { font-size: 16px; line-height: 1.5; color: var(--text-dim); margin: 0 0 6px; }
+.g-note b { color: #fff; }
+
+/* the six types, as collectible cards */
+.g-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0 16px; }
+@media (max-width: 760px) { .g-cards { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 460px) { .g-cards { grid-template-columns: 1fr; } }
+.g-card { position: relative; padding: 12px 12px 14px; background: var(--panel-2);
+  border: var(--pixel) solid var(--border); outline: var(--pixel) solid var(--border-dark);
+  box-shadow: 0 4px 0 var(--border-dark); transition: transform .12s, box-shadow .12s; }
+.g-card:hover { transform: translateY(-3px); box-shadow: 0 7px 0 var(--border-dark); }
+.g-ico { font-size: 26px; line-height: 1; margin-bottom: 8px; }
+.g-name { font-family: var(--font-pixel); font-size: 10px; color: var(--gold); margin-bottom: 7px; letter-spacing: 1px; }
+.g-desc { font-size: 15px; line-height: 1.4; color: var(--text-dim); }
+.g-desc b { color: #fff; }
+.g-card.rare { border-color: var(--gold); background: linear-gradient(180deg, #2f4fc0 0%, var(--panel) 100%); }
+.g-rare { font-family: var(--font-pixel); font-size: 6px; padding: 2px 5px; margin-left: 5px; vertical-align: middle;
+  color: #2a1200; background: var(--gold); border: 1px solid #fff2a8; }
+
+/* loadout tiles */
+.g-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0 14px; }
+@media (max-width: 560px) { .g-stats { grid-template-columns: repeat(2, 1fr); } }
+.g-stat { text-align: center; padding: 12px 6px; background: #0b1f5c;
+  border: var(--pixel) solid var(--border); outline: var(--pixel) solid var(--border-dark); }
+.g-val { font-family: var(--font-pixel); font-size: 15px; color: var(--ok); text-shadow: 2px 2px 0 #06143f; }
+.g-lbl { font-family: var(--font-pixel); font-size: 6px; color: var(--text-dim); margin-top: 7px; letter-spacing: 1px; line-height: 1.6; }
+
+/* timing bars, like a loading meter */
+.g-bars { margin: 12px 0 14px; }
+.g-bar { display: grid; grid-template-columns: 110px 1fr auto; gap: 10px; align-items: center; margin-bottom: 9px; }
+@media (max-width: 560px) { .g-bar { grid-template-columns: 1fr; gap: 3px; } }
+.g-bar-lbl { font-family: var(--font-pixel); font-size: 8px; color: var(--gold); letter-spacing: 1px; }
+.g-bar-track { height: 18px; background: #0b1f5c; border: 2px solid var(--border); outline: 2px solid var(--border-dark); }
+.g-bar-fill { height: 100%; background: repeating-linear-gradient(90deg, var(--ok) 0 8px, #3bd47a 8px 16px); }
+.g-bar-fill.up { width: 55%; }
+.g-bar-fill.ed { width: 78%; background: repeating-linear-gradient(90deg, var(--gold) 0 8px, var(--gold-2) 8px 16px); }
+.g-bar-val { font-size: 14px; color: var(--text-dim); white-space: nowrap; }
+
+.g-list { margin: 10px 0 6px; padding-left: 0; list-style: none; }
+.g-list li { position: relative; padding: 7px 0 7px 26px; font-size: 16px; line-height: 1.45; color: var(--text-dim);
+  border-bottom: 1px solid rgba(143,211,255,.14); }
+.g-list li:last-child { border-bottom: 0; }
+.g-list li b { color: #fff; }
+.g-list li::before { content: '▸'; position: absolute; left: 6px; top: 7px; color: var(--border); }
+.g-list.tips li::before { content: '★'; color: var(--gold); }
+.g-foot { margin-top: 16px; padding-top: 12px; border-top: var(--pixel) solid var(--border-dark);
+  font-family: var(--font-pixel); font-size: 8px; line-height: 1.8; color: var(--gold); text-align: center; }
