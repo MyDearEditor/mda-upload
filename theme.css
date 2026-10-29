@@ -6,12 +6,19 @@
   /* palette (pulled from the mockup) */
   --sky:           #2f7fe6;     /* bright sky blue */
   --sky-deep:      #1a4fb8;
-  --panel:         #1b3a9e;     /* deep panel blue */
-  --panel-2:       #2448b8;
+  --panel:         #0a1d44;     /* deep navy — the main box */
+  --panel-2:       #0443ab;     /* royal blue — inner boxes */
+  --panel-lite:    #0553d0;     /* bright cobalt */
+  --panel-deep:    #06132c;     /* near-black navy — wells and inputs */
+  --panel-royal:   #0443ab;     /* royal (call drop box) */
+  --pale:          #b9d6f8;     /* ice blue — borders and the video box */
+  --bezel-hi:      rgba(255,255,255,.26);  /* bevel highlight on button tops */
+  --bezel-lo:      rgba(0,0,0,.38);        /* bevel shade on button bottoms */
+  --radius:        7px;         /* soft modern corner on the pixel frames */
   --panel-glass:   rgba(120, 190, 255, 0.18);
-  --border:        #8fd3ff;     /* light cyan pixel border */
-  --border-dark:   #0b1f5c;
-  --gold:          #ffcc1a;
+  --border:        #b9d6f8;     /* ice-blue pixel border */
+  --border-dark:   #050e24;
+  --gold:          #fbc716;
   --gold-2:        #ff9a00;
   --gold-dark:     #7a3b00;
   --red:           #e8313a;

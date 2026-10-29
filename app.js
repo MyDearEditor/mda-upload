@@ -371,10 +371,28 @@
       $('my-folder').href = j.folder_url;
       if (!j.calls.length) { el.innerHTML = '<div class="empty">No uploads yet.</div>'; return; }
       el.innerHTML = j.calls.map(function (c) {
-        return '<div class="item"><div class="t">' + esc(fmtDate(c.uploaded_at)) + (c.note ? ' · ' + esc(c.note) : '') + (c.mode === 'sync' ? ' · <span class="tag">SYNC ONLY</span>' : '') + '</div>' +
-          '<span class="pill ' + esc(c.status) + '">' + esc(c.status) + (c.status === 'Ready' && c.clips ? ' · ' + c.clips + ' clips' : '') + '</span>' +
-          (c.problem ? '<div class="m">' + esc(c.problem) + '</div>' : '') + '</div>';
+        var title = c.note ? esc(c.note) : 'Untitled call';
+        var names = [];
+        try { names = JSON.parse(c.clip_names || '[]') || []; } catch (e) { names = []; }
+        var body = '';
+        if (c.mode === 'sync') body += '<div class="m">Synced full video — no clips were cut for this one.</div>';
+        else if (names.length) body += '<div class="m">' + names.length + ' clip' + (names.length === 1 ? '' : 's') + ' delivered:</div><ul class="clips">' + names.map(function (n) { return '<li>🎬 ' + esc(n) + '</li>'; }).join('') + '</ul>';
+        else if (c.status === 'Ready' && c.clips) body += '<div class="m">' + esc(c.clips) + ' clips delivered. (Clip names show here for uploads from now on.)</div>';
+        else body += '<div class="m">Nothing delivered yet — this fills in when the edit finishes.</div>';
+        if (c.folder_url) body += '<a class="btn small" href="' + esc(c.folder_url) + '" target="_blank" rel="noopener">OPEN THIS CALL\'S FOLDER ↗</a>';
+        return '<div class="item call">' +
+          '<button class="call-head" type="button">' +
+            '<span class="arrow">▶</span>' +
+            '<span class="call-title">' + title + (c.mode === 'sync' ? ' <span class="tag">SYNC ONLY</span>' : '') + '<small>' + esc(fmtDate(c.uploaded_at)) + '</small></span>' +
+            '<span class="pill ' + esc(c.status) + '">' + esc(c.status) + (c.status === 'Ready' && c.clips ? ' · ' + c.clips + ' clips' : '') + '</span>' +
+          '</button>' +
+          (c.problem ? '<div class="m prob">' + esc(c.problem) + '</div>' : '') +
+          '<div class="call-body">' + body + '</div>' +
+          '</div>';
       }).join('');
+      el.querySelectorAll('.call-head').forEach(function (h) {
+        h.addEventListener('click', function () { h.closest('.call').classList.toggle('open'); });
+      });
     }).catch(function (err) { el.innerHTML = '<div class="err">' + esc(err.message) + '</div>'; });
   }
 
