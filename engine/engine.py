@@ -486,10 +486,11 @@ def map_moments(transcript, agent_name, labelled=False):
     system = f"""You are a sales coach reviewing a recorded life-insurance call so OTHER AGENTS can learn from it.
 The agent is {agent_name}; the other voice is the client. {whose} Output strict JSON only.
 
-Find up to 8 moments that would genuinely teach another agent something. For each:
-  kind   - one of: opener, discovery, objection, close, rapport
+Find up to 8 moments worth posting. Most are moments that teach another agent something. For each:
+  kind   - one of: opener, discovery, objection, close, rapport, funny
   score  - 1-10, how much an agent would actually learn. Be harsh. 9-10 is worth copying word for word,
-           5 is ordinary, below 5 is not worth posting.
+           5 is ordinary, below 5 is not worth posting. For a funny moment, score how hard it lands
+           rather than what it teaches.
   start  - where the moment begins INCLUDING its setup. If the agent is answering an objection or a
            question, the moment starts with the CLIENT saying it, never with the agent's reply.
   end    - where the thought is finished. Never end mid-thought.
@@ -499,6 +500,13 @@ Find up to 8 moments that would genuinely teach another agent something. For eac
 A moment lasts as long as it needs. A single sharp line may be 20 seconds; an objection handled from
 start to finish may be 90. Do not pad to fill time and do not cut a thought short to hit a number.
 Skip anything mostly made of health questions, carrier talk, or personal or financial details.
+
+About "funny": a call going sideways can be the most watchable thing on a recording, so it counts even
+when it teaches nothing. But MOST CALLS CONTAIN NOTHING FUNNY, and returning no funny moment is the
+normal, correct answer. Do not go looking for one. Awkward is not funny. Mildly odd is not funny. Only
+mark one if another agent would actually laugh and send it to a colleague because they have had that
+exact call themselves. The joke has to be on the situation or on the agent, never on the client - a
+clip that makes the person on the other end look stupid is not usable, whatever else it is.
 
 JSON: {{"moments":[{{"kind":"...","score":0,"start":0,"end":0,"title":"...","why":"..."}}]}}"""
     j = claude(system, 'Transcript with [start-end] seconds per line:\n\n' + '\n'.join(lines), 4000)
@@ -518,6 +526,10 @@ JSON: {{"moments":[{{"kind":"...","score":0,"start":0,"end":0,"title":"...","why
 
 
 MIN_SCORE = 5.0                          # the picker's own scale: below 5 is not worth posting
+# A kind that can be claimed for almost any stretch of a call would win its variety slot every time and
+# push out a strong teaching moment. 'funny' earns its place only when it clearly lands, so it is held to
+# a higher bar than the rest - and the prompt tells the picker that finding none is the normal answer.
+KIND_FLOOR = {'funny': 7.0}
 
 
 def choose_moments(moments, limit=5):
@@ -525,7 +537,8 @@ def choose_moments(moments, limit=5):
 
     Variety never reaches below the quality floor: a weak moment of a missing kind is worse than a second
     strong one of a kind already covered."""
-    ranked = sorted([m for m in moments if m['score'] >= MIN_SCORE], key=lambda m: -m['score'])
+    ranked = sorted([m for m in moments if m['score'] >= KIND_FLOOR.get(m['kind'], MIN_SCORE)],
+                    key=lambda m: -m['score'])
     picked, kinds = [], set()
     for m in ranked:
         if len(picked) >= limit:
