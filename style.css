@@ -356,6 +356,9 @@ input[type="color"] { height: 48px; padding: 4px; cursor: pointer; }
 .guide-cta:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--gold-dark); }
 .guide-cta.active { animation: none; filter: none; }
 .guide-cta.active::after { display: none; }
+/* once it has been clicked, the glow retires for good: flat orange from then on */
+.guide-cta.seen { animation: none; filter: none; background: var(--gold-2); }
+.guide-cta.seen::after { display: none; }
 @media (max-width: 760px) { .hud-stack { justify-self: start; } }
 
 /* ---------- HOW WE EDIT page ---------- */

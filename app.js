@@ -200,6 +200,9 @@
   }
   function signOut() { session = null; save('mda_session', null); applySession(); }
   document.querySelectorAll('.navbtn[data-view]').forEach(function (b) { b.onclick = function () { show(b.dataset.view); }; });
+  // the HOW WE EDIT button glows only until its first ever click on this device
+  if (load('mda_guide_seen')) $('guide-cta').classList.add('seen');
+  $('guide-cta').addEventListener('click', function () { save('mda_guide_seen', 1); this.classList.add('seen'); });
   document.querySelectorAll('[data-go]').forEach(function (b) { b.onclick = function () { show(b.dataset.go); if (b.dataset.go === 'login') setTimeout(function () { $('login-user').focus(); }, 300); }; });
   $('book-btn').href = CFG.BOOK_URL || '#';
   $('logout').onclick = signOut;
