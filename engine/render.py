@@ -28,6 +28,38 @@ ZOOM_MIN_TURN = 0.8  # ignore turns too short to be worth a move
 ZOOM_JOIN = 0.5      # merge agent turns separated by less than this
 ZOOM_MAX_TURNS = 40  # keep the filter expression to a sane length
 
+_ZSCALE = None  # does this ffmpeg have the zscale filter? (checked once)
+
+
+def _has_zscale():
+    global _ZSCALE
+    if _ZSCALE is None:
+        try:
+            out = subprocess.run(['ffmpeg', '-hide_banner', '-filters'], capture_output=True, text=True).stdout
+            _ZSCALE = ' zscale ' in out
+        except Exception:
+            _ZSCALE = False
+    return _ZSCALE
+
+
+def _hdr_tonemap(video):
+    """Phones record HDR (HLG or PQ). Re-encoding that as plain SDR washes the clip out with a green
+    cast, so when the source is HDR, convert it down to BT.709 properly. Returns a filter prefix
+    ('' when the source is already SDR, or when this ffmpeg cannot do the conversion)."""
+    try:
+        trc = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                              '-show_entries', 'stream=color_transfer', '-of', 'csv=p=0', video],
+                             capture_output=True, text=True).stdout.strip().lower()
+    except Exception:
+        return ''
+    if trc not in ('arib-std-b67', 'smpte2084'):
+        return ''
+    if not _has_zscale():
+        print('render: HDR source but ffmpeg has no zscale - colors may look washed out', file=sys.stderr)
+        return ''
+    return ('zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,'
+            'tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,')
+
 
 def _zoom_expr(turns, total):
     """ffmpeg zoompan z-expression: 1.0 by default, easing up to ZOOM_MAX while the agent speaks.
@@ -368,15 +400,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     zoom_filter = ('' if not zexpr else
                    f",zoompan=z='{zexpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps={FPS}")
 
+    tm = _hdr_tonemap(cfg['video'])                       # '' for SDR sources
     fc = [f"[0:v]fps={FPS},select='{vsel}',setpts=N/{FPS}/TB[vc]",
           "[1:a]anull[ac]",
-          f"[vc]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
+          f"[vc]{tm}scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"
           f"{zoom_filter},setsar=1,ass={ass_esc}[vo]",
           "[ac]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[ao]"]
     cmd = ['ffmpeg', '-v', 'error', '-y', '-ss', f'{V0:.3f}', '-t', f'{A1-A0+0.5:.3f}', '-i', cfg['video'],
            '-f', 'f32le', '-ar', str(SR), '-ac', '1', '-i', bleeped,
            '-filter_complex', ';'.join(fc), '-map', '[vo]', '-map', '[ao]',
            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p', '-r', str(FPS),
+           '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709',
            '-c:a', 'aac', '-b:a', '192k', '-ac', '2', '-movflags', '+faststart', out_path]
     subprocess.run(cmd, check=True)
     caption_text = ' '.join(' '.join(x[1] for x in c) for c in cards)
