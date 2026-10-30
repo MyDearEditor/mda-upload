@@ -850,10 +850,19 @@ def process(call):
                 dropped.append(f'{hook}: compliance ({", ".join(map(str, chk.get("items", [])))[:200]})'); continue
             # name: the clip's own hook, then the date and Eastern time of the upload
             name = f'{hook} - {stamp}'
+            folder_title = safe_name(hook)                         # the clip's folder is just its title
             if name.lower() in used_names:                         # two clips with the same hook
                 name = f'{hook} ({i}) - {stamp}'
+                folder_title = safe_name(f'{hook} ({i})')
             used_names.add(name.lower())
-            fid = drive_upload(out, name + '.mp4', dest, 'video/mp4')
+            # each clip gets its own subfolder inside the call folder: one video + one clip sheet
+            try:
+                clip_dest = drive_mkdir(folder_title, dest)
+            except Exception as ex:
+                log.warning('%s: could not create clip folder "%s" (%s); delivering to the call folder',
+                            cid, folder_title, ex)
+                clip_dest = dest
+            fid = drive_upload(out, name + '.mp4', clip_dest, 'video/mp4')
 
             # clip sheet: thumbnail, copy-and-paste caption, and why it was cut this way
             caption = str(c.get('ig_caption', '')).strip()
@@ -867,12 +876,12 @@ def process(call):
                     'rank': c.get('rank'), 'kind': c.get('kind'), 'of': len(clips), 'zoom_note': zoom_note,
                     'edits': {k: res.get(k) for k in ('picked', 'fillers', 'tightened', 'bleeps',
                                                       'redacted', 'kept_pauses', 'zooms')}})
-                drive_upload(pdf, name + '.pdf', dest, 'application/pdf')
+                drive_upload(pdf, name + '.pdf', clip_dest, 'application/pdf')
             except Exception as ex:                                # never lose the caption over a PDF problem
                 log.warning('%s: clip sheet failed (%s); delivering the caption as text', cid, ex)
                 txt = os.path.join(d, 'out', f'clip{i}.txt')
                 open(txt, 'w').write(caption + '\n')
-                drive_upload(txt, name + '.txt', dest, 'text/plain')
+                drive_upload(txt, name + '.txt', clip_dest, 'text/plain')
             delivered.append(fid)
             log.info('%s: delivered "%s" (%.0fs, %d bleeps)', cid, hook, res['duration'], res['bleeps'])
 
