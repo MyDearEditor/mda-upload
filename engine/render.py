@@ -23,9 +23,9 @@ RED = '&H002B1BE0'   # BGR for #E01B2B
 BLEEP_LEVEL = 0.175  # 30% quieter than the original 0.25 - audible, not startling
 HOOK_SECONDS = 8.0   # the banner lands and leaves; it is a hook, not a watermark
 ZOOM_MAX = 1.20      # how far in to push while the agent is talking
-ZOOM_EASE = 0.35     # seconds to ride in and out, so it reads as a move rather than a jump
-ZOOM_MIN_TURN = 0.8  # ignore turns too short to be worth a move
-ZOOM_JOIN = 0.5      # merge agent turns separated by less than this
+ZOOM_EASE = 1.2      # seconds to ride in and out: a slow, deliberate glide, not a snap
+ZOOM_MIN_TURN = 2.6  # a turn must fit the glide in, a beat at full push, and the glide out
+ZOOM_JOIN = 0.9      # merge agent turns separated by less than this
 ZOOM_MAX_TURNS = 40  # keep the filter expression to a sane length
 
 _ZSCALE = None  # does this ffmpeg have the zscale filter? (checked once)
@@ -85,6 +85,51 @@ def _zoom_expr(turns, total):
         parts.append(f'between({T}\\,{s:.2f}\\,{e:.2f})*'
                      f'max(0\\,min(1\\,min(({T}-{s:.2f})/{ZOOM_EASE}\\,({e:.2f}-{T})/{ZOOM_EASE})))')
     return f'1+{ZOOM_MAX - 1:.3f}*({"+".join(parts)})', len(merged)
+
+
+def _font_file(name):
+    """Where fontconfig says this family's bold face lives (what libass itself will use)."""
+    try:
+        out = subprocess.run(['fc-match', '-f', '%{file}', f'{name}:bold'],
+                             capture_output=True, text=True).stdout.strip()
+        return out or None
+    except Exception:
+        return None
+
+
+def _measurer(font_name, size):
+    """Pixel-width function for text at the ASS script resolution, for sizing drawn boxes.
+    Falls back to a character estimate when the font cannot be measured."""
+    try:
+        from PIL import ImageFont
+        f = ImageFont.truetype(_font_file(font_name), size)
+        return lambda t: float(f.getlength(t))
+    except Exception:
+        return lambda t: len(t) * size * 0.56
+
+
+def _wrap(meas, text, maxw):
+    """Greedy word-wrap against a measurer; every caption line must fit its own box."""
+    lines, cur = [], ''
+    for word in text.split():
+        trial = (cur + ' ' + word).strip()
+        if cur and meas(trial) > maxw:
+            lines.append(cur)
+            cur = word
+        else:
+            cur = trial
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def _rrect(w, h, r=20):
+    """ASS vector path for a w x h rounded rectangle starting at 0,0 (anchored via \\an5)."""
+    w, h = int(round(w)), int(round(h))
+    r = int(min(r, h / 2, w / 2))
+    return (f"m {r} 0 l {w - r} 0 b {w} 0 {w} 0 {w} {r} l {w} {h - r} "
+            f"b {w} {h} {w} {h} {w - r} {h} l {r} {h} b 0 {h} 0 {h} 0 {h - r} "
+            f"l 0 {r} b 0 0 0 0 {r} 0")
 
 
 def _pcm(path, start, dur, sr):
@@ -164,8 +209,11 @@ def words_in_range(transcript, start, end):
     return out
 
 
-def mark_words(words, bleep_words=(), cut_spans=(), cut_fillers=True):
-    """Tag each word cut/bleep and why. Redactions and repeat names go first, then fillers."""
+def mark_words(words, bleep_words=(), cut_spans=(), cut_fillers=True, name_mode='bleep'):
+    """Tag each word cut/bleep and why. Redactions and repeat names go first, then fillers.
+
+    name_mode 'bleep' (default): quiet tone over the first mention, later mentions cut.
+    name_mode 'cut': every mention is removed outright - no tone anywhere."""
     name_keys = [k.lower() for k in bleep_words if k]
     seen = False
     for w in words:
@@ -176,9 +224,10 @@ def mark_words(words, bleep_words=(), cut_spans=(), cut_fillers=True):
             w['why'] = 'redaction'
             continue
         if name_keys and any(k in re.sub(r'[^a-z]', '', w['w'].lower()) for k in name_keys):
-            if seen:
+            if seen or name_mode == 'cut':
                 w['cut'] = True
                 w['why'] = 'name'
+                seen = True
             else:
                 w['bleep'] = seen = True
     if cut_fillers:
@@ -240,12 +289,12 @@ def plan_segments(words, start, end, gap_max=0.5, pad=0.15, tail=0.4):
     return segs, total, {'tightened': tightened, 'kept_pauses': kept_pauses}
 
 
-def predict_duration(transcript, start, end, bleep_words=(), cut_spans=(), gap_max=0.5, pad=0.15):
+def predict_duration(transcript, start, end, bleep_words=(), cut_spans=(), gap_max=0.5, pad=0.15, name_mode='bleep'):
     """Finished length this span would deliver, or None. Same maths the renderer uses."""
     words = words_in_range(transcript, start, end)
     if not words:
         return None
-    mark_words(words, bleep_words, cut_spans)
+    mark_words(words, bleep_words, cut_spans, name_mode=name_mode)
     plan = plan_segments(words, start, end, gap_max, pad)
     return None if plan is None else plan[1]
 
@@ -265,7 +314,8 @@ def _render(cfg, out_path, tmp):
     words = words_in_range(cfg['transcript'], cfg['start'], cfg['end'])
     if not words:
         raise ValueError('no words in clip range')
-    mark_words(words, cfg.get('bleep_words', []), cfg.get('cut_spans', []), cfg.get('cut_fillers', True))
+    mark_words(words, cfg.get('bleep_words', []), cfg.get('cut_spans', []), cfg.get('cut_fillers', True),
+               name_mode=cfg.get('name_mode', 'bleep'))
 
     # ---- keep-segments: drop cut words, tighten dead air, leave the pauses that do work
     gap_max, pad = cfg.get('gap_max', 0.5), cfg.get('gap_pad', 0.15)
@@ -373,19 +423,47 @@ WrapStyle: 0
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Cap,{font},72,{cap_text},{cap_text},{cap_box},{cap_box},-1,0,0,0,100,100,0,0,3,14,0,2,90,90,{margin_v},1
 Style: Hook,{font},66,{hook_text},{hook_text},{hook_box},{hook_box},-1,0,0,0,100,100,0,0,3,18,0,8,90,90,200,1
+Style: CapR,{font},72,{cap_text},{cap_text},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
+Style: BoxCap,{font},72,{cap_box},{cap_box},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
+Style: HookR,{font},66,{hook_text},{hook_text},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
+Style: BoxHook,{font},66,{hook_box},{hook_box},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
+    rounded = str(st.get('corners', '')).lower() == 'rounded'
+    meas72 = _measurer(font, 72) if rounded else None
+    meas66 = _measurer(font, 66) if rounded else None
     if cfg.get('hook'):
         hook_end = min(float(cfg.get('hook_seconds', HOOK_SECONDS)), total)
-        ass += (f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,"
-                f"{{\\fad(0,350)}}{cfg['hook'].upper()}\n")
+        if rounded:
+            yc = 244.0                                     # first hook line sits where the banner used to
+            for ln in _wrap(meas66, cfg['hook'].upper(), 840):
+                bw = meas66(ln) + 56
+                ass += (f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},BoxHook,,0,0,0,,"
+                        f"{{\\fad(0,350)\\an5\\pos(540,{yc:.0f})\\p1}}{_rrect(bw, 88)}{{\\p0}}\n")
+                ass += (f"Dialogue: 2,{_ts(0)},{_ts(hook_end)},HookR,,0,0,0,,"
+                        f"{{\\fad(0,350)\\an5\\pos(540,{yc:.0f})}}{ln}\n")
+                yc += 98
+        else:
+            ass += (f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,"
+                    f"{{\\fad(0,350)}}{cfg['hook'].upper()}\n")
     for i, c in enumerate(cards):
         s = to_out(c[0][0]['s'])
         e = to_out(cards[i + 1][0][0]['s']) if i + 1 < len(cards) else total
         e = min(e, to_out(c[-1][0]['e']) + 0.6)
-        ass += f"Dialogue: 0,{_ts(s)},{_ts(e)},Cap,,0,0,0,,{{\\fscx92\\fscy92\\t(0,80,\\fscx100\\fscy100)}}{' '.join(x[1] for x in c)}\n"
+        if rounded:
+            H, GAP = 96, 10
+            lines = _wrap(meas72, ' '.join(x[1] for x in c), 840)
+            yc = 1920 - margin_v - H / 2 + 14 - (len(lines) - 1) * (H + GAP)
+            for ln in lines:
+                bw = meas72(ln) + 60
+                ass += (f"Dialogue: 0,{_ts(s)},{_ts(e)},BoxCap,,0,0,0,,"
+                        f"{{\\an5\\pos(540,{yc:.0f})\\p1}}{_rrect(bw, H)}{{\\p0}}\n")
+                ass += f"Dialogue: 1,{_ts(s)},{_ts(e)},CapR,,0,0,0,,{{\\an5\\pos(540,{yc:.0f})}}{ln}\n"
+                yc += H + GAP
+        else:
+            ass += f"Dialogue: 0,{_ts(s)},{_ts(e)},Cap,,0,0,0,,{{\\fscx92\\fscy92\\t(0,80,\\fscx100\\fscy100)}}{' '.join(x[1] for x in c)}\n"
     ass_path = os.path.join(tmp, 'caps.ass')
     open(ass_path, 'w').write(ass)
 

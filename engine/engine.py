@@ -768,6 +768,7 @@ def process(call):
 
         # zoom mode is per upload; it needs to know who is talking, so it rides on the speaker labels
         zoom_want = str(call.get('zoom', '')).lower() in ('1', 'true', 'yes', 'on')
+        name_mode = 'cut' if str(call.get('name_mode', '')).lower() == 'cut' else 'bleep'
         zoom_note = ''
         if zoom_want and not spk:
             zoom_note = ("Zoom was switched on for this call, but we could not reliably tell your voice from "
@@ -822,7 +823,8 @@ def process(call):
         for n, (m, s0, e0) in enumerate(rough, 1):
             _, _, i0, j0 = screens[n - 1]
             fit = fit_span(sents[i0:j0 + 1], s0, e0,
-                           lambda s, e: predict_duration(transcript, s, e, name_keys, cut_spans))
+                           lambda s, e: predict_duration(transcript, s, e, name_keys, cut_spans,
+                                                         name_mode=name_mode))
             if not fit:
                 dropped.append('%s: nothing left after compliance cuts' % str(m.get('title', 'moment'))[:40])
                 continue
@@ -840,7 +842,7 @@ def process(call):
                 res = render({'video': video, 'audio': audio, 'offset': offset, 'transcript': tpath,
                               'start': float(c['start']), 'end': float(c['end']), 'hook': hook, 'out': out,
                               'bleep_words': name_keys, 'cut_spans': cut_spans, 'gap_max': 0.5, 'gap_pad': 0.15,
-                              'style': style, 'zoom_turns': zturns})
+                              'style': style, 'zoom_turns': zturns, 'name_mode': name_mode})
             except Exception as ex:
                 log.warning('%s: clip %d render failed: %s', cid, i, ex); dropped.append(f'{hook}: render failed'); continue
             if not CLIP_MIN <= res['duration'] <= CLIP_MAX:
