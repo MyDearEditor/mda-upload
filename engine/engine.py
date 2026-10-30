@@ -885,7 +885,8 @@ def process(call):
                 open(txt, 'w').write(caption + '\n')
                 drive_upload(txt, name + '.txt', clip_dest, 'text/plain')
             delivered.append(fid)
-            log.info('%s: delivered "%s" (%.0fs, %d bleeps)', cid, hook, res['duration'], res['bleeps'])
+            log.info('%s: delivered "%s" (%.0fs, %d bleeps%s)', cid, hook, res['duration'], res['bleeps'],
+                     ', HDR->709' if res.get('hdr') else '')
 
         for dmsg in dropped:
             log.info('%s: dropped -> %s', cid, dmsg)

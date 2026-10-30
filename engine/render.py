@@ -49,7 +49,8 @@ def _hdr_tonemap(video):
     try:
         trc = subprocess.run(['ffprobe', '-v', 'error', '-select_streams', 'v:0',
                               '-show_entries', 'stream=color_transfer', '-of', 'csv=p=0', video],
-                             capture_output=True, text=True).stdout.strip().lower()
+                             capture_output=True, text=True).stdout
+        trc = trc.strip().strip(',').lower()   # some ffprobe builds emit a trailing comma in csv
     except Exception:
         return ''
     if trc not in ('arib-std-b67', 'smpte2084'):
@@ -492,7 +493,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
            '-c:a', 'aac', '-b:a', '192k', '-ac', '2', '-movflags', '+faststart', out_path]
     subprocess.run(cmd, check=True)
     caption_text = ' '.join(' '.join(x[1] for x in c) for c in cards)
-    return {'out': out_path, 'duration': total, 'caption_text': caption_text,
+    return {'out': out_path, 'duration': total, 'caption_text': caption_text, 'hdr': bool(tm),
             'bleeps': sum(w['bleep'] for w in words), 'cuts': len(segs) - 1,
             'picked': float(cfg['end']) - float(cfg['start']),
             'fillers': n_filler, 'redacted': n_redact, 'tightened': tightened,
