@@ -267,7 +267,8 @@
     status('Starting…');
     var mode = (document.querySelector('input[name="mode"]:checked') || {}).value || 'clips'; save('mda_mode', mode);
     var zoom = mode === 'clips' && $('zoom').checked; save('mda_zoom', zoom ? 1 : 0);
-    api({ action: 'startCall', note: $('note').value, mode: mode, zoom: zoom ? 1 : 0 })
+    var nm = (document.querySelector('input[name="nm"]:checked') || {}).value || 'bleep'; save('mda_namemode', nm);
+    api({ action: 'startCall', note: $('note').value, mode: mode, zoom: zoom ? 1 : 0, name_mode: nm })
       .then(function (j) { callId = j.callId; status('Uploading video…'); return uploadOne('video', files.video, callId); })
       .then(function (id) { ids.video = id; $('drop-video').classList.add('done'); status('Uploading call recording…'); return uploadOne('audio', files.audio, callId); })
       .then(function (id) { ids.audio = id; $('drop-audio').classList.add('done'); status('Finishing…');
@@ -290,12 +291,15 @@
   function syncZoomVisible() {
     var m = (document.querySelector('input[name="mode"]:checked') || {}).value || 'clips';
     $('zoom-switch').classList.toggle('hidden', m !== 'clips');
+    $('nm-block').classList.toggle('hidden', m !== 'clips');
   }
   (function () {
     var m = load('mda_mode'); var r = m && document.querySelector('input[name="mode"][value="' + m + '"]'); if (r) r.checked = true;
     $('zoom').checked = !!load('mda_zoom');
+    var n = load('mda_namemode'); var nr = n && document.querySelector('input[name="nm"][value="' + n + '"]'); if (nr) nr.checked = true;
     syncZoomVisible();
   })();
+  document.querySelectorAll('input[name="nm"]').forEach(function (r) { r.onchange = function () { save('mda_namemode', r.value); }; });
   $('zoom').onchange = function () { save('mda_zoom', this.checked ? 1 : 0); };
   document.querySelectorAll('input[name="mode"]').forEach(function (r) { r.onchange = function () {
     $('upload-btn').innerHTML = '<span class="arr">▶</span> ' + (r.value === 'sync' ? 'UPLOAD + SYNC ONLY' : 'UPLOAD BOTH FILES') + ' <span class="arr">◀</span>';
@@ -409,16 +413,19 @@
   var styleFonts = ['Poppins', 'Montserrat', 'Bebas Neue', 'Anton', 'Oswald', 'Bangers', 'Luckiest Guy'];
   function readStyle() {
     return { font: $('st-font').value, box: $('st-box').value.toUpperCase(), text: $('st-text').value.toUpperCase(),
-             hook_box: $('st-hook-box').value.toUpperCase(), hook_text: $('st-hook-text').value.toUpperCase(), position: $('st-pos').value };
+             hook_box: $('st-hook-box').value.toUpperCase(), hook_text: $('st-hook-text').value.toUpperCase(), position: $('st-pos').value,
+             corners: $('st-corners').value };
   }
   function writeStyle(st) {
     $('st-font').value = st.font; $('st-box').value = st.box; $('st-text').value = st.text;
-    $('st-hook-box').value = st.hook_box; $('st-hook-text').value = st.hook_text; $('st-pos').value = st.position; preview();
+    $('st-hook-box').value = st.hook_box; $('st-hook-text').value = st.hook_text; $('st-pos').value = st.position;
+    $('st-corners').value = st.corners === 'rounded' ? 'rounded' : 'square'; preview();
   }
   function preview() {
     var st = readStyle(), cap = $('pv-cap'), hook = $('pv-hook');
     cap.style.fontFamily = "'" + st.font + "', sans-serif"; cap.style.background = st.box; cap.style.color = st.text;
     hook.style.fontFamily = "'" + st.font + "', sans-serif"; hook.style.background = st.hook_box; hook.style.color = st.hook_text;
+    cap.style.borderRadius = hook.style.borderRadius = st.corners === 'rounded' ? '14px' : '0';
     cap.style.bottom = { low: '17%', mid: '27%', high: '40%' }[st.position];
   }
   function loadStyle() {
@@ -429,7 +436,7 @@
         b.style.background = p.box; b.style.color = p.text; b.style.fontFamily = "'" + p.font + "', sans-serif";
         b.onclick = function () { writeStyle(p); }; $('presets').appendChild(b);
       });
-      ['st-font', 'st-box', 'st-text', 'st-hook-box', 'st-hook-text', 'st-pos'].forEach(function (id) { $(id).oninput = preview; $(id).onchange = preview; });
+      ['st-font', 'st-box', 'st-text', 'st-hook-box', 'st-hook-text', 'st-pos', 'st-corners'].forEach(function (id) { $(id).oninput = preview; $(id).onchange = preview; });
       $('st-save').onclick = function () {
         $('st-err').textContent = ''; $('st-status').textContent = 'SAVING…'; $('st-save').disabled = true;
         api({ action: 'setStyle', style: readStyle() }).then(function () { $('st-status').textContent = 'SAVED! Your next upload will use this style.'; blip(); })

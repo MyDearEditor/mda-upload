@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css?v=3">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
@@ -156,6 +156,13 @@
         </span>
         <small class="zoom-copy">The camera pushes in while <b>you</b> talk and pulls back out for the client. It keeps people watching longer.<br><span class="zoom-tip">⚠ WEAR HEADPHONES — so the client isn't coming out of your phone speaker.</span></small>
       </label>
+      <div id="nm-block">
+        <label>CLIENT'S NAME IN THE CLIPS <small>(what we do when their name gets said)</small></label>
+        <div class="nm-row">
+          <label class="mode-opt"><input type="radio" name="nm" value="bleep" checked><span><b>🔇 QUIET BLEEP</b><small>First mention gets a soft tone; any repeats are cut out.</small></span></label>
+          <label class="mode-opt"><input type="radio" name="nm" value="cut"><span><b>✂️ CUT IT OUT</b><small>Every mention is snipped out clean — no tone at all.</small></span></label>
+        </div>
+      </div>
       <button class="btn gold big" id="upload-btn" disabled><span class="arr">▶</span> UPLOAD BOTH FILES <span class="arr">◀</span></button>
       <div class="total-bar hidden" id="total-wrap"><div class="total-fill" id="total-fill"></div><div class="total-label" id="upload-status"></div><div class="total-pct" id="total-pct">0%</div></div>
       <p class="err" id="upload-err"></p>
@@ -200,6 +207,7 @@
             <label>HOOK BANNER TEXT<input id="st-hook-text" type="color" value="#FFFFFF"></label>
           </div>
           <label>CAPTION HEIGHT<select id="st-pos"><option value="low">Low (default, clear of your face)</option><option value="mid">Middle</option><option value="high">High</option></select></label>
+          <label>CAPTION CORNERS<select id="st-corners"><option value="square">Square (classic)</option><option value="rounded">Rounded</option></select></label>
           <div class="presets" id="presets"></div>
           <button class="btn gold big" id="st-save"><span class="arr">▶</span> SAVE MY STYLE</button>
           <p class="status" id="st-status"></p><p class="err" id="st-err"></p>
@@ -370,6 +378,6 @@
 
 <footer class="foot">MYDEAR ACADEMY</footer>
 <script src="config.js?v=4"></script>
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

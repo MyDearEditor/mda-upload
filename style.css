@@ -160,6 +160,12 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255,204,26,.
 .item .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .pill { font-family: var(--font-pixel); font-size: 8px; padding: 6px 8px; background: #0b1f5c; border: 2px solid var(--border); white-space: nowrap; }
 
+/* client-name choice on the upload page */
+.nm-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.nm-row .mode-opt { margin: 0; }
+@media (max-width: 600px) { .nm-row { grid-template-columns: 1fr; } }
+#nm-block.hidden { display: none; }
+
 /* expandable call rows on MY UPLOADS */
 .item.call { display: block; padding: 0; overflow: hidden; }
 .call-head { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; width: 100%; padding: 12px;
