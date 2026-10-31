@@ -248,6 +248,7 @@
     var got = progress.video + progress.audio;
     var tp = all ? Math.min(100, Math.round(got / all * 100)) : 0;
     $('total-fill').style.width = tp + '%'; $('total-pct').textContent = tp + '%';
+    if (island.phase === 'upload') islandSet(tp, null);   // the island bar rides the upload
     if (tp >= 25 && lastMilestone < 25) { blip(); lastMilestone = 25; }
     if (tp >= 50 && lastMilestone < 50) { blip(); lastMilestone = 50; }
     if (tp >= 75 && lastMilestone < 75) { blip(); lastMilestone = 75; }
@@ -262,12 +263,14 @@
     if (uploading || !files.video || !files.audio) return;
     uploading = true; $('upload-btn').disabled = true; $('upload-err').textContent = '';
     progress.video = progress.audio = 0; lastMilestone = 0; $('total-fill').style.width = '0%'; $('total-pct').textContent = '0%'; $('total-wrap').classList.remove('hidden');
-    var status = function (t) { $('upload-status').textContent = t.toUpperCase().replace(/\.\.\.|…/g, ''); $('upload-status').classList.toggle('loading', /ING/.test(t.toUpperCase())); };
+    var status = function (t) { $('upload-status').textContent = t.toUpperCase().replace(/\.\.\.|…/g, ''); $('upload-status').classList.toggle('loading', /ING/.test(t.toUpperCase()));
+      if (island.phase === 'upload') $('isl-label').textContent = t.toUpperCase(); };
     var callId, ids = {};
     status('Starting…');
     var mode = (document.querySelector('input[name="mode"]:checked') || {}).value || 'clips'; save('mda_mode', mode);
     var zoom = mode === 'clips' && $('zoom').checked; save('mda_zoom', zoom ? 1 : 0);
     var nm = (document.querySelector('input[name="nm"]:checked') || {}).value || 'bleep'; save('mda_namemode', nm);
+    islandUploading();                         // fly straight to the island; its bar carries the upload
     api({ action: 'startCall', note: $('note').value, mode: mode, zoom: zoom ? 1 : 0, name_mode: nm })
       .then(function (j) { callId = j.callId; status('Uploading video…'); return uploadOne('video', files.video, callId); })
       .then(function (id) { ids.video = id; $('drop-video').classList.add('done'); status('Uploading call recording…'); return uploadOne('audio', files.audio, callId); })
@@ -277,16 +280,12 @@
         status('COMPLETE!'); $('total-fill').style.width = '100%'; $('total-pct').textContent = '100%'; uploading = false;
         document.body.classList.add('shake'); setTimeout(function () { document.body.classList.remove('shake'); }, 500);
         jingle(); flock();                       // 10 eagles from all directions + screech + level-complete jingle
-        setTimeout(function () {                 // then beam them over to Editor Island
-          $('teleport').classList.remove('hidden');
-          setTimeout(function () {
-            $('teleport').classList.add('hidden');
-            islandShow(callId);
-          }, 1400);
-        }, 1600);
+        islandSet(100, 'FILES LANDED — THE CREW TAKES OVER!');
+        setTimeout(function () { islandEditing(callId); }, 2200);
       })
       .catch(function (err) {
         uploading = false; status('');
+        islandLeave();
         $('upload-err').textContent = err.message + ' — nothing was lost; press Upload to try again.';
         $('upload-btn').disabled = false;
       });
@@ -312,20 +311,32 @@
   $('upload-again').onclick = function () {
     ['video', 'audio'].forEach(function (k) { setFile(k, null); setBar(k, 0, 0); $('drop-' + k).classList.remove('done'); $('file-' + k).value = ''; });
     $('note').value = ''; $('total-wrap').classList.add('hidden'); $('upload-status').textContent = '';
-    islandReset();
-    $('editor-island').classList.add('hidden'); $('upload-card').classList.remove('hidden');
+    islandLeave();
   };
 
-  // ---------- EDITOR ISLAND: the crew edits while the agent watches real progress ----------
-  var island = { callId: null, timer: null, pct: 0 };
+  // ---------- EDITOR ISLAND: fly there on upload, watch the crew cut the clips ----------
+  var island = { callId: null, timer: null, pct: 0, phase: null };
   function islandSet(p, label) {
     $('isl-fill').style.width = p + '%';
     $('isl-pct').textContent = p + '%';
     $('isl-mon-pct').textContent = p + '%';
     if (label) $('isl-label').textContent = label;
   }
-  function islandShow(callId) {
-    island.callId = callId; island.pct = 2;
+  function islandUploading() {                 // phase 1: the flight in, bar shows the upload itself
+    island.phase = 'upload'; island.pct = 0;
+    $('upload-card').classList.add('hidden');
+    document.body.classList.add('on-island');
+    $('editor-island').classList.remove('hidden', 'isl-done');
+    $('editor-island').classList.add('flying');
+    setTimeout(function () { $('editor-island').classList.remove('flying'); }, 2200);
+    $('isl-bubble').classList.add('hidden'); $('isl-folder').classList.add('hidden');
+    $('isl-err').textContent = '';
+    islandSet(0, 'FLYING YOUR FILES TO EDITOR ISLAND…');
+    $('isl-note').textContent = 'Keep this page open until the upload bar hits 100% — after that the crew takes it and you can go.';
+  }
+  function islandEditing(callId) {             // phase 2: the crew works, bar shows real edit stages
+    island.callId = callId; island.pct = 2; island.phase = 'edit';
+    document.body.classList.add('on-island');
     $('editor-island').classList.remove('hidden', 'isl-done');
     $('isl-bubble').classList.add('hidden'); $('isl-folder').classList.add('hidden');
     $('isl-err').textContent = '';
@@ -334,10 +345,15 @@
     islandPoll();
     island.timer = setInterval(islandPoll, 20000);
   }
-  window.MDA_ISLAND = islandShow;              // lets automated checks drive the island directly
+  window.MDA_ISLAND = { up: islandUploading, edit: islandEditing };   // lets automated checks drive the island
   function islandReset() {
     if (island.timer) clearInterval(island.timer);
-    island.timer = null; island.callId = null; island.pct = 0;
+    island.timer = null; island.callId = null; island.pct = 0; island.phase = null;
+  }
+  function islandLeave() {                     // back to the upload form: the island scene stands down
+    islandReset();
+    document.body.classList.remove('on-island');
+    $('editor-island').classList.add('hidden'); $('upload-card').classList.remove('hidden');
   }
   function islandPoll() {
     if (!island.callId) return;

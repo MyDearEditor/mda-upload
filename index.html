@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css?v=3">
-<link rel="stylesheet" href="style.css?v=9">
+<link rel="stylesheet" href="style.css?v=10">
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
@@ -169,7 +169,7 @@
       <p class="rule">FILM ONLY YOURSELF. NO SCREENS, QUOTE TOOLS, CRM OR PAPERWORK IN THE SHOT.</p>
     </div>
 
-    <div class="panel glass island-panel hidden" id="editor-island">
+    <div class="island-scene hidden" id="editor-island">
       <div class="done-badge">🏝 WELCOME TO</div>
       <h2 class="isl-title">EDITOR ISLAND</h2>
       <div class="isl-stage" id="isl-stage">
@@ -177,12 +177,14 @@
         <img class="isl-float f2" src="assets/island2.png" alt="">
         <div class="isl-bubble hidden" id="isl-bubble">YOUR VIDEOS ARE DONE BEING EDITED!</div>
         <div class="isl-monitor"><span id="isl-mon-pct">0%</span><i></i></div>
-        <span class="islndr c0" aria-hidden="true"></span>
-        <span class="islndr c1" aria-hidden="true"></span>
+        <img class="isl-base" src="assets/island_stage.png" alt="">
+        <span class="isl-prop crate" aria-hidden="true"></span>
         <span class="islndr c2 runner" aria-hidden="true"></span>
+        <span class="islndr c1" aria-hidden="true"></span>
+        <span class="islndr c0" aria-hidden="true"></span>
         <span class="islndr c3" aria-hidden="true"></span>
+        <span class="isl-prop pile" aria-hidden="true"></span>
         <div class="isl-confetti" id="isl-confetti" aria-hidden="true"></div>
-        <div class="isl-ground"><div class="isl-dirt"></div></div>
       </div>
       <div class="total-bar isl-bar"><div class="total-fill" id="isl-fill"></div><div class="total-label" id="isl-label">CHECKING IN AT THE EDIT BAY…</div><div class="total-pct" id="isl-pct">0%</div></div>
       <p class="sub isl-note" id="isl-note">The crew is on it. We already emailed you a receipt — you can close this page anytime, and another email lands the moment your videos are ready.</p>
@@ -192,7 +194,6 @@
         <button class="btn" id="upload-again">UPLOAD ANOTHER CALL</button>
       </div>
     </div>
-    <div class="teleport hidden" id="teleport" aria-hidden="true"><div class="tp-text">⚡ TELEPORTING TO EDITOR ISLAND…</div></div>
 
     <div class="steps" aria-hidden="true">
       <div class="step"><div class="num">1</div><div class="ico">📹+📞</div><div>UPLOAD YOUR VIDEO AND YOUR PHONE CALL.</div></div>
@@ -396,6 +397,6 @@
 
 <footer class="foot">MYDEAR ACADEMY</footer>
 <script src="config.js?v=4"></script>
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 </body>
 </html>
