@@ -693,11 +693,20 @@ def process(call):
     d = os.path.join(WORK, cid)
     shutil.rmtree(d, ignore_errors=True); os.makedirs(os.path.join(d, 'out'))
     try:
+        def tell(pct, label):
+            """Stage report for the Editor Island progress bar; never worth failing a call over."""
+            try:
+                api('engineProgress', callId=cid, pct=pct, label=label)
+            except Exception:
+                pass
+
         log.info('%s: downloading', cid)
+        tell(6, 'Flying your files to the island')
         video = drive_download(call['video_id'], os.path.join(d, 'video.mp4'))
         audio = drive_download(call['audio_id'], os.path.join(d, 'call.mp3'))
 
         log.info('%s: syncing', cid)
+        tell(18, 'Lining the call audio up with your video')
         offset, conf, detail = sync_offset(video, audio, d)
         vdur = media_duration(video)
         adur = media_duration(audio)
@@ -739,6 +748,7 @@ def process(call):
             full = synced_full_video(video, audio, offset, a_min, a_max, os.path.join(d, 'out', 'full.mp4'))
             fid_full = drive_upload(full, f'Full call (synced audio) - {stamp}.mp4', dest, 'video/mp4')
             log.info('%s: delivered full synced video (%.0fs)', cid, a_max - a_min)
+            tell(30, 'Full synced video delivered')
         except Exception as ex:
             log.warning('%s: full synced video failed: %s', cid, ex); fid_full = None
         if mode == 'sync':
@@ -749,6 +759,7 @@ def process(call):
             return
 
         log.info('%s: transcribing the video window only', cid)
+        tell(35, 'Listening to the whole call')
         tpath = os.path.join(d, 'call.json')
         transcript = transcribe(audio, tpath, a_min, a_max)
         usable = [sg for sg in transcript if sg['start'] >= a_min and sg['end'] <= a_max]
@@ -817,6 +828,7 @@ def process(call):
         cut_spans = redaction_spans(transcript, redactions)
         name_keys = sorted({_norm(n) for n in names if len(_norm(n)) >= 3})
         log.info('%s: %d name keys, %d cut spans', cid, len(name_keys), len(cut_spans))
+        tell(55, 'Picking the best moments')
 
         # re-fit now that the real cuts are known, staying inside the screened sentences
         clips = []
@@ -836,6 +848,7 @@ def process(call):
 
         for i, c in enumerate(clips, 1):
             hook = re.sub(r'[\\/:*?"<>|]', '', str(c.get('hook', f'Clip {i}')).strip())[:60] or f'Clip {i}'
+            tell(min(97, 57 + int(40 * (i - 1) / max(1, len(clips)))), f'Cutting clip {i} of {len(clips)}')
             out = os.path.join(d, 'out', f'clip{i}.mp4')
             zturns = agent_turns(transcript, float(c['start']), float(c['end'])) if (zoom_want and spk) else None
             try:
