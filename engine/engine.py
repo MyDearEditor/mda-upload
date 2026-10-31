@@ -227,14 +227,16 @@ def sync_offset(video, audio, tmp):
         both halves of that overlap must independently land on (nearly) the same offset. This also
         works when the video is just a short snippet of a much longer call."""
         o0, o1 = max(0.0, -off_s), min(adur, vdur - off_s)
-        if o1 - o0 < 40:                          # too little shared time to judge (also rejected later)
+        olap = o1 - o0
+        if olap < 10:                             # too little shared time to judge (also rejected later)
             return None
+        seg_need = min(15.0, max(4.0, olap / 2 - 1))   # short pairs get judged on shorter halves
         mid = (o0 + o1) / 2.0
         got = []
         for s0, s1 in ((o0, mid), (mid, o1)):
             i0 = int(s0 * EPS)
             seg = ea[i0:int(s1 * EPS)]
-            if len(seg) < 15 * EPS:
+            if len(seg) < seg_need * EPS:
                 return None
             seg = seg - seg.mean()
             cs = s.correlate(ev, seg, mode='full', method='fft')
@@ -420,14 +422,17 @@ def sync_problem(detail, offset, vdur, adur):
     elif overlap < adur * 0.9:
         out.append('At the closest match we could find, only about %s of the call was on camera.' % mmss(overlap))
 
-    if adur < 180 or adur < vdur * 0.4:
+    if adur < vdur * 0.6:
         out.append('The recording is much shorter than the video. That is usually one of two things: your '
                    'dialer only caught part of the call, or the camera was rolling for a long time before '
                    'the call began. Anything filmed before the call starts cannot be matched or used, so '
                    'start recording when you dial.')
-    elif vdur < adur * 0.4:
+    elif vdur < adur * 0.6:
         out.append('The video is much shorter than the recording. If you only filmed part of the call, '
                    'there may not be enough footage to work with.')
+    elif max(adur, vdur) < 60:
+        out.append('Both files are quite short, and short pairs are the hardest to line up. Make sure the '
+                   'camera is rolling while the call is actually happening, then upload the pair again.')
     else:
         out.append('They look like two different calls. Please check that both files are from the same '
                    'call and upload again.')
@@ -721,16 +726,19 @@ def process(call):
         a_min = max(0.0, -offset) + 0.5
         a_max = min(adur, vdur - offset) - 0.5
         log.info('%s: video %.0fs, recording %.0fs, usable window %.1f-%.1f s (%.0fs)', cid, vdur, adur, a_min, a_max, a_max - a_min)
-        if a_max - a_min < 45:
+        mode = call.get('mode') or 'clips'
+        # a sync-only job just needs enough shared time to line up; clips need room to cut from
+        if a_max - a_min < (10 if mode == 'sync' else 45):
             api('engineProblem', callId=cid, notifyAgent=True,
                 reason=('The two files lined up, but only %s of the call was actually on camera, which is '
-                        'not enough to cut anything from.\nYour video is %s long and your call recording '
+                        'not enough to %s.\nYour video is %s long and your call recording '
                         'is %s.\nFilm from the start of the call, and check your dialer captured the whole '
                         'thing, then upload again.'
-                        % (mmss(max(0.0, a_max - a_min)), mmss(vdur), mmss(adur))))
+                        % (mmss(max(0.0, a_max - a_min)),
+                           'work with' if mode == 'sync' else 'cut anything from',
+                           mmss(vdur), mmss(adur))))
             return
 
-        mode = call.get('mode') or 'clips'
         style = call.get('style') or {}
         stamp = when_label(call)                      # '2026-10-26 - 6.42 PM ET', shared by every name here
         delivered, dropped, used_names = [], [], set()
