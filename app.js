@@ -277,8 +277,12 @@
         status('COMPLETE!'); $('total-fill').style.width = '100%'; $('total-pct').textContent = '100%'; uploading = false;
         document.body.classList.add('shake'); setTimeout(function () { document.body.classList.remove('shake'); }, 500);
         jingle(); flock();                       // 10 eagles from all directions + screech + level-complete jingle
-        setTimeout(function () {
-          $('upload-card').classList.add('hidden'); $('upload-done').classList.remove('hidden');
+        setTimeout(function () {                 // then beam them over to Editor Island
+          $('teleport').classList.remove('hidden');
+          setTimeout(function () {
+            $('teleport').classList.add('hidden');
+            islandShow(callId);
+          }, 1400);
         }, 1600);
       })
       .catch(function (err) {
@@ -308,8 +312,70 @@
   $('upload-again').onclick = function () {
     ['video', 'audio'].forEach(function (k) { setFile(k, null); setBar(k, 0, 0); $('drop-' + k).classList.remove('done'); $('file-' + k).value = ''; });
     $('note').value = ''; $('total-wrap').classList.add('hidden'); $('upload-status').textContent = '';
-    $('upload-done').classList.add('hidden'); $('upload-card').classList.remove('hidden');
+    islandReset();
+    $('editor-island').classList.add('hidden'); $('upload-card').classList.remove('hidden');
   };
+
+  // ---------- EDITOR ISLAND: the crew edits while the agent watches real progress ----------
+  var island = { callId: null, timer: null, pct: 0 };
+  function islandSet(p, label) {
+    $('isl-fill').style.width = p + '%';
+    $('isl-pct').textContent = p + '%';
+    $('isl-mon-pct').textContent = p + '%';
+    if (label) $('isl-label').textContent = label;
+  }
+  function islandShow(callId) {
+    island.callId = callId; island.pct = 2;
+    $('editor-island').classList.remove('hidden', 'isl-done');
+    $('isl-bubble').classList.add('hidden'); $('isl-folder').classList.add('hidden');
+    $('isl-err').textContent = '';
+    islandSet(2, 'CHECKING IN AT THE EDIT BAY…');
+    $('isl-note').textContent = 'The crew is on it. We already emailed you a receipt — you can close this page anytime, and another email lands the moment your videos are ready.';
+    islandPoll();
+    island.timer = setInterval(islandPoll, 20000);
+  }
+  window.MDA_ISLAND = islandShow;              // lets automated checks drive the island directly
+  function islandReset() {
+    if (island.timer) clearInterval(island.timer);
+    island.timer = null; island.callId = null; island.pct = 0;
+  }
+  function islandPoll() {
+    if (!island.callId) return;
+    api({ action: 'myCalls' }).then(function (j) {
+      var c = (j.calls || []).filter(function (x) { return x.call_id === island.callId; })[0];
+      if (!c) return;
+      if (c.status === 'Ready') return islandDone(c);
+      if (c.status === 'Problem') return islandProblem(c);
+      var pr = String(c.progress || '').split('|');
+      var p = Math.min(99, parseInt(pr[0], 10) || 0);
+      if (p <= island.pct) p = Math.min(island.pct + 1, 99);   // never looks frozen between stages
+      island.pct = p;
+      var label = (pr[1] || (c.status === 'Editing' ? 'The crew is editing…' : 'Waiting for an open edit bay…'));
+      islandSet(p, label.toUpperCase());
+    }).catch(function () {});
+  }
+  function islandDone(c) {
+    islandReset();
+    islandSet(100, 'ALL DONE — CHECK YOUR DRIVE!');
+    $('editor-island').classList.add('isl-done');
+    $('isl-bubble').classList.remove('hidden');
+    $('isl-note').textContent = 'Delivered! Your clips are waiting in your Drive, and the email is on its way to your inbox.';
+    if (c.folder_url) { $('isl-folder').href = c.folder_url; $('isl-folder').classList.remove('hidden'); }
+    var conf = $('isl-confetti'); conf.innerHTML = '';
+    for (var i = 0; i < 26; i++) {
+      var s = document.createElement('i');
+      s.style.left = (3 + Math.random() * 94) + '%';
+      s.style.animationDelay = (Math.random() * 1.6) + 's';
+      s.style.background = ['#fbc716', '#0553d0', '#b9d6f8', '#e8313a', '#15a98a'][i % 5];
+      conf.appendChild(s);
+    }
+    jingle();
+  }
+  function islandProblem(c) {
+    islandReset();
+    islandSet(island.pct, 'THE CREW HIT A SNAG.');
+    $('isl-err').textContent = (c.problem || 'Something went wrong with this call.') + ' — check your email, then press Upload Another Call to retry.';
+  }
 
   // Chunked, resumable upload straight to Google Drive (session URL comes from the doorman).
   function uploadOne(kind, file, callId) {
@@ -387,7 +453,8 @@
         return '<div class="item call">' +
           '<button class="call-head" type="button">' +
             '<span class="arrow">▶</span>' +
-            '<span class="call-title">' + title + (c.mode === 'sync' ? ' <span class="tag">SYNC ONLY</span>' : '') + '<small>' + esc(fmtDate(c.uploaded_at)) + '</small></span>' +
+            '<span class="call-title">' + title + (c.mode === 'sync' ? ' <span class="tag">SYNC ONLY</span>' : '') + '<small>' + esc(fmtDate(c.uploaded_at)) +
+            (c.status === 'Editing' && c.progress ? ' · ⚙ ' + esc(String(c.progress).split('|')[1] || 'editing') + ' — ' + esc(String(c.progress).split('|')[0] || '0') + '%' : '') + '</small></span>' +
             '<span class="pill ' + esc(c.status) + '">' + esc(c.status) + (c.status === 'Ready' && c.clips ? ' · ' + c.clips + ' clips' : '') + '</span>' +
           '</button>' +
           (c.problem ? '<div class="m prob">' + esc(c.problem) + '</div>' : '') +
