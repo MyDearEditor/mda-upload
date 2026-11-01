@@ -236,7 +236,9 @@ body.on-island .steps { display: none; }
   border: 6px solid transparent; border-top-color: #06132c; }
 .isl-bar { margin: 0 auto 16px; max-width: 640px; }
 .isl-note { max-width: 560px; margin: 0 auto 16px; }
-.island-scene .isl-actions { margin-top: 12px; margin-bottom: 8px; }
+/* the buttons live between the island and the bar, and only pop in once the crew is done */
+.island-scene .isl-actions { display: none; margin: -10px 0 20px; }
+.isl-done .isl-actions, .isl-problem .isl-actions { display: flex; animation: pop .5s cubic-bezier(.2,1.4,.4,1); }
 @media (max-width: 700px) {
   .islndr { width: 64px; height: 64px; }
   .islndr::before { background-size: 192px 256px; }

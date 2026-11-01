@@ -326,7 +326,7 @@
     island.phase = 'upload'; island.pct = 0;
     $('upload-card').classList.add('hidden');
     document.body.classList.add('on-island');
-    $('editor-island').classList.remove('hidden', 'isl-done');
+    $('editor-island').classList.remove('hidden', 'isl-done', 'isl-problem');
     $('editor-island').classList.add('flying');
     setTimeout(function () { $('editor-island').classList.remove('flying'); }, 2200);
     $('isl-bubble').classList.add('hidden'); $('isl-folder').classList.add('hidden');
@@ -337,7 +337,7 @@
   function islandEditing(callId) {             // phase 2: the crew works, bar shows real edit stages
     island.callId = callId; island.pct = 2; island.phase = 'edit';
     document.body.classList.add('on-island');
-    $('editor-island').classList.remove('hidden', 'isl-done');
+    $('editor-island').classList.remove('hidden', 'isl-done', 'isl-problem');
     $('isl-bubble').classList.add('hidden'); $('isl-folder').classList.add('hidden');
     $('isl-err').textContent = '';
     islandSet(2, 'CHECKING IN AT THE EDIT BAY…');
@@ -390,6 +390,7 @@
   function islandProblem(c) {
     islandReset();
     islandSet(island.pct, 'THE CREW HIT A SNAG.');
+    $('editor-island').classList.add('isl-problem');
     $('isl-err').textContent = (c.problem || 'Something went wrong with this call.') + ' — check your email, then press Upload Another Call to retry.';
   }
 
