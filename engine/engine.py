@@ -537,24 +537,38 @@ MIN_SCORE = 5.0                          # the picker's own scale: below 5 is no
 KIND_FLOOR = {'funny': 7.0}
 
 
+def overlap_s(a0, a1, b0, b1):
+    """Seconds two spans share."""
+    return max(0.0, min(a1, b1) - max(a0, b0))
+
+
 def choose_moments(moments, limit=5):
     """Best first - but not five versions of the same lesson. Every kind gets a slot before any repeats.
 
     Variety never reaches below the quality floor: a weak moment of a missing kind is worse than a second
-    strong one of a kind already covered."""
+    strong one of a kind already covered. And two moments telling mostly the same stretch of the call are
+    the same moment - the lower-scored one never takes a slot."""
     ranked = sorted([m for m in moments if m['score'] >= KIND_FLOOR.get(m['kind'], MIN_SCORE)],
                     key=lambda m: -m['score'])
+
+    def retells(m, picked):
+        for p in picked:
+            ov = overlap_s(m['start'], m['end'], p['start'], p['end'])
+            if ov > 0.5 * min(m['end'] - m['start'], p['end'] - p['start']):
+                return True
+        return False
+
     picked, kinds = [], set()
     for m in ranked:
         if len(picked) >= limit:
             break
-        if m['kind'] not in kinds:
+        if m['kind'] not in kinds and not retells(m, picked):
             picked.append(m)
             kinds.add(m['kind'])
     for m in ranked:
         if len(picked) >= limit:
             break
-        if not any(m is p for p in picked):
+        if not any(m is p for p in picked) and not retells(m, picked):
             picked.append(m)
     return sorted(picked, key=lambda m: -m['score'])
 
@@ -625,6 +639,24 @@ def fit_span(sents, start, end, predict, lo=CLIP_MIN, hi=CLIP_MAX):
         else:
             return s, e, d
     return best
+
+
+def free_runs(sents, i0, j0, taken):
+    """Sentence indexes i0..j0 split into contiguous runs of footage no earlier clip has claimed.
+
+    This is what keeps two clips from ever sharing footage: a later clip may only be fitted inside one
+    of these runs, so it physically cannot grow into a span an earlier (higher-ranked) clip delivered."""
+    pool = [k for k in range(i0, j0 + 1)
+            if not any(sents[k][0] < t1 - 0.2 and sents[k][1] > t0 + 0.2 for t0, t1 in taken)]
+    runs, cur = [], []
+    for k in pool:
+        if cur and k != cur[-1] + 1:
+            runs.append(cur)
+            cur = []
+        cur.append(k)
+    if cur:
+        runs.append(cur)
+    return runs
 
 
 def caption_and_redact(transcript, spans, agent_name):
@@ -838,16 +870,30 @@ def process(call):
         log.info('%s: %d name keys, %d cut spans', cid, len(name_keys), len(cut_spans))
         tell(55, 'Picking the best moments')
 
-        # re-fit now that the real cuts are known, staying inside the screened sentences
-        clips = []
+        # re-fit now that the real cuts are known, staying inside the screened sentences - and never
+        # inside footage an earlier clip already claimed. rough is best-first, so when two moments
+        # converge on the same stretch the stronger one keeps it and the weaker is dropped, not shipped
+        # as a near-identical twin.
+        clips, taken = [], []
         for n, (m, s0, e0) in enumerate(rough, 1):
             _, _, i0, j0 = screens[n - 1]
-            fit = fit_span(sents[i0:j0 + 1], s0, e0,
+            title = str(m.get('title', 'moment'))[:40]
+            runs = free_runs(sents, i0, j0, taken)
+            if not runs:
+                dropped.append('%s: covers the same footage as an earlier clip' % title)
+                continue
+            mid = (s0 + e0) / 2
+            run = min(runs, key=lambda r: abs((sents[r[0]][0] + sents[r[-1]][1]) / 2 - mid))
+            fit = fit_span([sents[k] for k in run], s0, e0,
                            lambda s, e: predict_duration(transcript, s, e, name_keys, cut_spans,
                                                          name_mode=name_mode))
             if not fit:
-                dropped.append('%s: nothing left after compliance cuts' % str(m.get('title', 'moment'))[:40])
+                dropped.append('%s: nothing left after compliance cuts' % title)
                 continue
+            if any(overlap_s(fit[0], fit[1], t0, t1) > 1.0 for t0, t1 in taken):
+                dropped.append('%s: overlaps an earlier clip' % title)
+                continue
+            taken.append((fit[0], fit[1]))
             copy = copy_by_n.get(n, {})
             clips.append({'start': fit[0], 'end': fit[1], 'rank': len(clips) + 1, 'kind': m.get('kind', ''),
                           'hook': copy.get('hook') or m.get('title', 'Clip %d' % n),
