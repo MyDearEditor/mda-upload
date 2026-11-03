@@ -486,6 +486,7 @@ input[type="color"] { height: 48px; padding: 4px; cursor: pointer; }
 .pv-hook, .pv-cap { position: absolute; left: 10%; right: 10%; text-align: center; font-weight: 800; line-height: 1.15; padding: 7px 8px; font-size: 13px; text-transform: uppercase; }
 .pv-hook { top: 9%; }
 .pv-cap { bottom: 17%; transition: bottom .25s; }
+.pv-hook { transition: top .25s; }
 
 /* ---------- admin usage dashboard ---------- */
 .seg { display: flex; gap: 6px; flex-wrap: wrap; }
