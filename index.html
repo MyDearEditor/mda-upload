@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css?v=3">
-<link rel="stylesheet" href="style.css?v=13">
+<link rel="stylesheet" href="style.css?v=14">
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
@@ -141,6 +141,7 @@
         <div class="mode-title">WHAT DO YOU WANT BACK?</div>
         <label class="mode-opt"><input type="radio" name="mode" value="clips" checked><span><b>CLIPS + SYNCED FULL VIDEO</b><small>We cut Reels for you, and you also get the whole video with the clean call audio.</small></span></label>
         <label class="mode-opt"><input type="radio" name="mode" value="sync"><span><b>SYNCED FULL VIDEO ONLY</b><small>No clips. Just your video with the call audio synced, ready to edit yourself.</small></span></label>
+        <label class="mode-opt"><input type="radio" name="mode" value="camera"><span><b>SPEAKING TO YOUR AUDIENCE</b><small>No client — just you talking to the camera. We cut the retakes, flubs and dead air; your last take always wins.</small></span></label>
       </div>
       <label class="note-label">CALL NAME <small>(optional — becomes this call's folder name in your Drive)</small><input id="note" maxlength="200" placeholder="e.g. Facebook lead, closed on the 2nd call"></label>
       <label class="zoom-pad" id="zoom-switch">
@@ -156,6 +157,13 @@
         </span>
         <small class="zoom-copy">The camera pushes in while <b>you</b> talk and pulls back out for the client. It keeps people watching longer.<br><span class="zoom-tip">⚠ WEAR HEADPHONES — so the client isn't coming out of your phone speaker.</span></small>
       </label>
+      <div id="cap-block" class="hidden">
+        <label>CAPTIONS ON YOUR VIDEO <small>(burned on in your My Style look)</small></label>
+        <div class="nm-row">
+          <label class="mode-opt"><input type="radio" name="cap" value="on" checked><span><b>💬 CAPTIONS ON</b><small>Word-by-word captions in your saved style — ready to post.</small></span></label>
+          <label class="mode-opt"><input type="radio" name="cap" value="off"><span><b>🎞 CAPTIONS OFF</b><small>Clean cut only — you add captions yourself later.</small></span></label>
+        </div>
+      </div>
       <div id="nm-block">
         <label>CLIENT'S NAME IN THE CLIPS <small>(what we do when their name gets said)</small></label>
         <div class="nm-row">
@@ -397,6 +405,6 @@
 
 <footer class="foot">MYDEAR ACADEMY</footer>
 <script src="config.js?v=4"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>

@@ -235,7 +235,11 @@
     files[kind] = f || null;
     $('name-' + kind).textContent = f ? f.name + ' · ' + fmtMB(f.size) : '';
     $('drop-' + kind).classList.toggle('has', !!f);
-    $('upload-btn').disabled = !(files.video && files.audio);
+    gateUpload();
+  }
+  function curMode() { return (document.querySelector('input[name="mode"]:checked') || {}).value || 'clips'; }
+  function gateUpload() {
+    $('upload-btn').disabled = !(files.video && (files.audio || curMode() === 'camera'));
   }
   function fmtMB(b) { return b > 1e9 ? (b / 1e9).toFixed(2) + ' GB' : Math.round(b / 1e6) + ' MB'; }
   var progress = { video: 0, audio: 0 };
@@ -260,22 +264,25 @@
   window.addEventListener('beforeunload', function (e) { if (uploading) { e.preventDefault(); e.returnValue = ''; } });
 
   $('upload-btn').onclick = function () {
-    if (uploading || !files.video || !files.audio) return;
+    if (uploading || !files.video || (!files.audio && curMode() !== 'camera')) return;
     uploading = true; $('upload-btn').disabled = true; $('upload-err').textContent = '';
     progress.video = progress.audio = 0; lastMilestone = 0; $('total-fill').style.width = '0%'; $('total-pct').textContent = '0%'; $('total-wrap').classList.remove('hidden');
     var status = function (t) { $('upload-status').textContent = t.toUpperCase().replace(/\.\.\.|…/g, ''); $('upload-status').classList.toggle('loading', /ING/.test(t.toUpperCase()));
       if (island.phase === 'upload') $('isl-label').textContent = t.toUpperCase(); };
     var callId, ids = {};
     status('Starting…');
-    var mode = (document.querySelector('input[name="mode"]:checked') || {}).value || 'clips'; save('mda_mode', mode);
-    var zoom = mode === 'clips' && $('zoom').checked; save('mda_zoom', zoom ? 1 : 0);
+    var mode = curMode(); save('mda_mode', mode);
+    var zoom = (mode === 'clips' || mode === 'camera') && $('zoom').checked; save('mda_zoom', zoom ? 1 : 0);
     var nm = (document.querySelector('input[name="nm"]:checked') || {}).value || 'bleep'; save('mda_namemode', nm);
+    var cap = (document.querySelector('input[name="cap"]:checked') || {}).value || 'on'; save('mda_captions', cap);
     islandUploading();                         // fly straight to the island; its bar carries the upload
-    api({ action: 'startCall', note: $('note').value, mode: mode, zoom: zoom ? 1 : 0, name_mode: nm })
+    api({ action: 'startCall', note: $('note').value, mode: mode, zoom: zoom ? 1 : 0, name_mode: nm, captions: cap })
       .then(function (j) { callId = j.callId; status('Uploading video…'); return uploadOne('video', files.video, callId); })
-      .then(function (id) { ids.video = id; $('drop-video').classList.add('done'); status('Uploading call recording…'); return uploadOne('audio', files.audio, callId); })
-      .then(function (id) { ids.audio = id; $('drop-audio').classList.add('done'); status('Finishing…');
-        return api({ action: 'finishCall', callId: callId, videoFileId: ids.video, audioFileId: ids.audio }); })
+      .then(function (id) { ids.video = id; $('drop-video').classList.add('done');
+        if (mode === 'camera') return '';      // talking to the audience: there is no call recording
+        status('Uploading call recording…'); return uploadOne('audio', files.audio, callId); })
+      .then(function (id) { ids.audio = id; if (id) $('drop-audio').classList.add('done'); status('Finishing…');
+        return api({ action: 'finishCall', callId: callId, videoFileId: ids.video, audioFileId: ids.audio || '' }); })
       .then(function () {
         status('COMPLETE!'); $('total-fill').style.width = '100%'; $('total-pct').textContent = '100%'; uploading = false;
         document.body.classList.add('shake'); setTimeout(function () { document.body.classList.remove('shake'); }, 500);
@@ -290,22 +297,37 @@
         $('upload-btn').disabled = false;
       });
   };
-  // zoom only means anything when we are cutting clips, so it hides in sync-only mode
+  // each mode shows only the choices that mean something in it
+  var ZOOM_COPY_CALL = document.querySelector('.zoom-copy') ? document.querySelector('.zoom-copy').innerHTML : '';
+  var ZOOM_COPY_CAM = 'The frame swaps to a subtle punch-in at every cut, so your jump cuts read as a choice — not a glitch.';
   function syncZoomVisible() {
-    var m = (document.querySelector('input[name="mode"]:checked') || {}).value || 'clips';
-    $('zoom-switch').classList.toggle('hidden', m !== 'clips');
+    var m = curMode();
+    $('zoom-switch').classList.toggle('hidden', m === 'sync');
     $('nm-block').classList.toggle('hidden', m !== 'clips');
+    $('cap-block').classList.toggle('hidden', m !== 'camera');
+    $('drop-audio').classList.toggle('hidden', m === 'camera');
+    var zc = document.querySelector('.zoom-copy');
+    if (zc && ZOOM_COPY_CALL) zc.innerHTML = m === 'camera' ? ZOOM_COPY_CAM : ZOOM_COPY_CALL;
+    if (m === 'camera' && files.audio) {       // a call recording picked earlier has no place here
+      setFile('audio', null); setBar('audio', 0, 0); $('drop-audio').classList.remove('done'); $('file-audio').value = '';
+    }
+    gateUpload();
   }
   (function () {
     var m = load('mda_mode'); var r = m && document.querySelector('input[name="mode"][value="' + m + '"]'); if (r) r.checked = true;
     $('zoom').checked = !!load('mda_zoom');
     var n = load('mda_namemode'); var nr = n && document.querySelector('input[name="nm"][value="' + n + '"]'); if (nr) nr.checked = true;
+    var cp = load('mda_captions'); var cr = cp && document.querySelector('input[name="cap"][value="' + cp + '"]'); if (cr) cr.checked = true;
+    $('upload-btn').innerHTML = '<span class="arr">▶</span> ' + (curMode() === 'sync' ? 'UPLOAD + SYNC ONLY'
+      : curMode() === 'camera' ? 'UPLOAD MY VIDEO' : 'UPLOAD BOTH FILES') + ' <span class="arr">◀</span>';
     syncZoomVisible();
   })();
   document.querySelectorAll('input[name="nm"]').forEach(function (r) { r.onchange = function () { save('mda_namemode', r.value); }; });
+  document.querySelectorAll('input[name="cap"]').forEach(function (r) { r.onchange = function () { save('mda_captions', r.value); }; });
   $('zoom').onchange = function () { save('mda_zoom', this.checked ? 1 : 0); };
   document.querySelectorAll('input[name="mode"]').forEach(function (r) { r.onchange = function () {
-    $('upload-btn').innerHTML = '<span class="arr">▶</span> ' + (r.value === 'sync' ? 'UPLOAD + SYNC ONLY' : 'UPLOAD BOTH FILES') + ' <span class="arr">◀</span>';
+    $('upload-btn').innerHTML = '<span class="arr">▶</span> ' + (r.value === 'sync' ? 'UPLOAD + SYNC ONLY'
+      : r.value === 'camera' ? 'UPLOAD MY VIDEO' : 'UPLOAD BOTH FILES') + ' <span class="arr">◀</span>';
     syncZoomVisible();
   }; });
   $('upload-again').onclick = function () {
@@ -463,6 +485,7 @@
         try { names = JSON.parse(c.clip_names || '[]') || []; } catch (e) { names = []; }
         var body = '';
         if (c.mode === 'sync') body += '<div class="m">Synced full video — no clips were cut for this one.</div>';
+        if (c.mode === 'camera') body += '<div class="m">Talking-to-camera video — retakes and dead air cut, your last take kept.</div>';
         else if (names.length) body += '<div class="m">' + names.length + ' clip' + (names.length === 1 ? '' : 's') + ' delivered:</div><ul class="clips">' + names.map(function (n) { return '<li>🎬 ' + esc(n) + '</li>'; }).join('') + '</ul>';
         else if (c.status === 'Ready' && c.clips) body += '<div class="m">' + esc(c.clips) + ' clips delivered. (Clip names show here for uploads from now on.)</div>';
         else body += '<div class="m">Nothing delivered yet — this fills in when the edit finishes.</div>';
@@ -470,7 +493,8 @@
         return '<div class="item call">' +
           '<button class="call-head" type="button">' +
             '<span class="arrow">▶</span>' +
-            '<span class="call-title">' + title + (c.mode === 'sync' ? ' <span class="tag">SYNC ONLY</span>' : '') + '<small>' + esc(fmtDate(c.uploaded_at)) +
+            '<span class="call-title">' + title + (c.mode === 'sync' ? ' <span class="tag">SYNC ONLY</span>'
+              : c.mode === 'camera' ? ' <span class="tag">TO CAMERA</span>' : '') + '<small>' + esc(fmtDate(c.uploaded_at)) +
             (c.status === 'Editing' && c.progress ? ' · ⚙ ' + esc(String(c.progress).split('|')[1] || 'editing') + ' — ' + esc(String(c.progress).split('|')[0] || '0') + '%' : '') + '</small></span>' +
             '<span class="pill ' + esc(c.status) + '">' + esc(c.status) + (c.status === 'Ready' && c.clips ? ' · ' + c.clips + ' clips' : '') + '</span>' +
           '</button>' +
