@@ -435,6 +435,8 @@ def _render(cfg, out_path, tmp):
     cap_text, cap_box = bgr(st.get('text'), '#FFFFFF'), bgr(st.get('box'), '#E01B2B')
     hook_text, hook_box = bgr(st.get('hook_text'), '#FFFFFF'), bgr(st.get('hook_box'), '#E01B2B')
     margin_v = {'low': 330, 'mid': 520, 'high': 760}.get(st.get('position'), cfg.get('cap_margin_v', 330))
+    # the title banner can ride lower too - Instagram's own icons cover the very top of the frame
+    hook_v = {'high': 200, 'mid': 380, 'low': 560}.get(str(st.get('hook_position', '')).lower(), 200)
     ass = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -444,7 +446,7 @@ WrapStyle: 0
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Cap,{font},72,{cap_text},{cap_text},{cap_box},{cap_box},-1,0,0,0,100,100,0,0,3,14,0,2,90,90,{margin_v},1
-Style: Hook,{font},66,{hook_text},{hook_text},{hook_box},{hook_box},-1,0,0,0,100,100,0,0,3,18,0,8,90,90,200,1
+Style: Hook,{font},66,{hook_text},{hook_text},{hook_box},{hook_box},-1,0,0,0,100,100,0,0,3,18,0,8,90,90,{hook_v},1
 Style: CapR,{font},72,{cap_text},{cap_text},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 Style: BoxCap,{font},72,{cap_box},{cap_box},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 Style: HookR,{font},66,{hook_text},{hook_text},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
@@ -460,7 +462,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if cfg.get('hook') and cap_on:
         hook_end = min(float(cfg.get('hook_seconds', HOOK_SECONDS)), total)
         if rounded:
-            yc = 244.0                                     # first hook line sits where the banner used to
+            yc = 244.0 + (hook_v - 200)                    # first hook line sits where the banner would
             for ln in _wrap(meas66, cfg['hook'].upper(), 840):
                 bw = meas66(ln) + 56
                 ass += (f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},BoxHook,,0,0,0,,"
