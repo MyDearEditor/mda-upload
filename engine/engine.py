@@ -704,6 +704,139 @@ flagged=true if the text contains ANY of the following; unsure=true if you canno
     return claude(system, user, 800)
 
 
+# ---------------------------------------------------------------- camera mode (talking to the audience)
+RETAKE_SIM = 0.8                         # how alike two sentences must read to count as takes of one line
+
+
+def _norm_tokens(text):
+    return [t for t in re.sub(r"[^a-z0-9' ]", ' ', text.lower()).split() if t]
+
+
+def sentence_words(transcript):
+    """Sentences as word-lists. Breaks on end punctuation AND on pauses, because a flubbed take is
+    usually abandoned mid-sentence and never gets its full stop."""
+    ws = [w for sg in transcript for w in sg['words']]
+    sents, cur = [], []
+    for n, w in enumerate(ws):
+        cur.append(w)
+        nxt = ws[n + 1] if n + 1 < len(ws) else None
+        if re.search(r'[.?!]["\')]?$', str(w['w']).strip()) or nxt is None or nxt['s'] - w['e'] > 0.8:
+            sents.append(cur)
+            cur = []
+    return [s for s in sents if s]
+
+
+def retake_spans(sents):
+    """The cut list that makes 'last take wins' true.
+
+    A retake shows up in a transcript as the same words said again - sometimes finished, sometimes
+    abandoned mid-line. Every sentence that reads like an earlier attempt at a LATER one is cut:
+    near-identical wording, or a false start that matches the later take's opening."""
+    import difflib
+    toks = [_norm_tokens(' '.join(str(w['w']) for w in s)) for s in sents]
+    cut = [False] * len(sents)
+    for i in range(len(sents)):
+        ti = toks[i]
+        if len(ti) < 3:
+            continue
+        for j in range(i + 1, len(sents)):
+            tj = toks[j]
+            if len(tj) < 3:
+                continue
+            whole = difflib.SequenceMatcher(None, ti, tj).ratio()
+            head = difflib.SequenceMatcher(None, ti, tj[:len(ti)]).ratio() if len(tj) > len(ti) else 0.0
+            if whole >= RETAKE_SIM or head >= RETAKE_SIM:
+                cut[i] = True
+                break
+    spans = [[s[0]['s'] - 0.05, s[-1]['e'] + 0.05] for s, c in zip(sents, cut) if c]
+    return spans, sum(cut)
+
+
+def camera_cut_plan(transcript, agent_name):
+    """Second opinion on the cut: what a human editor would drop that similarity can't see -
+    director talk ('okay, take two'), abandoned thoughts, and retakes whose wording changed.
+    Also names the finished video."""
+    lines = [f"[{sg['start']:.1f}-{sg['end']:.1f}] {sg['text'].strip()}" for sg in transcript]
+    system = f"""You are cutting a single-take talking-to-camera video for a life-insurance agent ({agent_name}).
+There is NO client; the agent speaks straight to the audience, and may flub lines and re-record them.
+Output strict JSON only.
+
+List every stretch that should be REMOVED from the finished video:
+  - meta/director talk: "let me start over", "wait", "take two", claps, checking the camera
+  - flubbed or abandoned attempts at a line the agent records again afterward. The LAST attempt is
+    always the keeper; every earlier attempt goes, even when the wording changed between takes.
+Do NOT remove natural speech, pauses or fillers (those are trimmed separately), and never remove
+the final take of anything. When in doubt, keep it.
+
+JSON: {{"remove":[{{"start":0,"end":0,"why":"..."}}],"title":"<6 words or fewer: what the video is about>"}}"""
+    j = claude(system, 'Transcript with [start-end] seconds per line:\n\n' + '\n'.join(lines), 3000)
+    spans = []
+    for r in j.get('remove', []):
+        try:
+            s, e = float(r['start']), float(r['end'])
+        except (TypeError, ValueError, KeyError):
+            continue
+        if e > s:
+            spans.append([s, e])
+    return spans, str(j.get('title', '') or '').strip()
+
+
+def process_camera(call, cid, d, video, tell):
+    """Talking-to-the-audience mode: one file, no client, no sync. The job is to deliver the take
+    the agent MEANT to record - retakes resolved in favor of the last one, dead air and fillers
+    trimmed, captions on or off as they chose."""
+    vdur = media_duration(video)
+    if vdur < 15:
+        api('engineProblem', callId=cid, notifyAgent=True,
+            reason='Your video is only %s long - there is not enough there to edit. Record your piece and upload again.' % mmss(vdur))
+        return
+    log.info('%s: camera mode, video %s', cid, mmss(vdur))
+    tell(22, 'Listening to your take')
+    tpath = os.path.join(d, 'video.json')
+    transcript = transcribe(video, tpath, 0.0, vdur)
+    words = [w for sg in transcript for w in sg['words']]
+    if len(words) < 30:
+        api('engineProblem', callId=cid, notifyAgent=True,
+            reason='We could not hear enough speech in your video to edit it. Check the camera microphone picked you up clearly, then upload again.')
+        return
+
+    tell(45, 'Spotting the retakes')
+    cut_spans, n_retakes = retake_spans(sentence_words(transcript))
+    title = ''
+    try:
+        extra, title = camera_cut_plan(transcript, call.get('display_name', 'the agent'))
+        # Claude's spans are advisory: clamp to the video, and no single span may swallow the take
+        cut_spans += [[max(0.0, s), min(vdur, e)] for s, e in extra if e - s < vdur * 0.6]
+    except Exception as ex:
+        log.warning('%s: camera cut plan failed (%s); cutting on retakes alone', cid, ex)
+    log.info('%s: %d retake cut(s), %d stretch(es) flagged in all', cid, n_retakes, len(cut_spans))
+
+    cap_on = str(call.get('captions', '')).lower() != 'off'
+    zoom_want = str(call.get('zoom', '')).lower() in ('1', 'true', 'yes', 'on')
+    stamp = when_label(call)
+    try:
+        dest = drive_mkdir(call_folder_name(call), call['agent_folder_id'])
+        log.info('%s: delivering into subfolder "%s"', cid, call_folder_name(call))
+    except Exception as ex:
+        log.warning('%s: could not create call subfolder (%s); delivering to the main folder', cid, ex)
+        dest = call['agent_folder_id']
+
+    tell(65, 'Cutting the flubs and dead air')
+    out = os.path.join(d, 'out', 'camera.mp4')
+    res = render({'video': video, 'audio': video, 'offset': 0.0, 'transcript': tpath,
+                  'start': max(0.0, words[0]['s'] - 0.3), 'end': min(vdur, words[-1]['e'] + 0.5),
+                  'hook': '', 'out': out, 'bleep_words': [], 'cut_spans': cut_spans,
+                  'gap_max': 0.5, 'gap_pad': 0.15, 'style': call.get('style') or {},
+                  'captions': cap_on, 'zoom_cuts': zoom_want})
+    tell(90, 'Uploading your clean cut')
+    name = (safe_name(title) + ' - ' + stamp) if title else ('Your video (clean cut) - ' + stamp)
+    drive_upload(res['out'], name + '.mp4', dest, 'video/mp4')
+    api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest)
+    log.info('%s: camera cut delivered (%.0fs from %.0fs, %d cuts, captions %s%s)', cid,
+             res['duration'], vdur, res['cuts'], 'on' if cap_on else 'off',
+             ', HDR->709' if res.get('hdr') else '')
+
+
 # ---------------------------------------------------------------- redaction spans
 def _norm(s):
     return re.sub(r'[^a-z0-9]', '', s.lower())
@@ -740,6 +873,10 @@ def process(call):
         log.info('%s: downloading', cid)
         tell(6, 'Flying your files to the island')
         video = drive_download(call['video_id'], os.path.join(d, 'video.mp4'))
+        mode = call.get('mode') or 'clips'
+        if mode == 'camera':                     # talking to the audience: one file, nothing to sync
+            process_camera(call, cid, d, video, tell)
+            return
         audio = drive_download(call['audio_id'], os.path.join(d, 'call.mp3'))
 
         log.info('%s: syncing', cid)
@@ -758,7 +895,6 @@ def process(call):
         a_min = max(0.0, -offset) + 0.5
         a_max = min(adur, vdur - offset) - 0.5
         log.info('%s: video %.0fs, recording %.0fs, usable window %.1f-%.1f s (%.0fs)', cid, vdur, adur, a_min, a_max, a_max - a_min)
-        mode = call.get('mode') or 'clips'
         # a sync-only job just needs enough shared time to line up; clips need room to cut from
         if a_max - a_min < (10 if mode == 'sync' else 45):
             api('engineProblem', callId=cid, notifyAgent=True,

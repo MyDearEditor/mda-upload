@@ -27,6 +27,7 @@ ZOOM_EASE = 1.2      # seconds to ride in and out: a slow, deliberate glide, not
 ZOOM_MIN_TURN = 2.6  # a turn must fit the glide in, a beat at full push, and the glide out
 ZOOM_JOIN = 0.9      # merge agent turns separated by less than this
 ZOOM_MAX_TURNS = 40  # keep the filter expression to a sane length
+CUT_PUNCH = 1.08     # camera mode: the quiet reframe that makes a jump cut read as a choice
 
 _ZSCALE = None  # does this ffmpeg have the zscale filter? (checked once)
 
@@ -86,6 +87,26 @@ def _zoom_expr(turns, total):
         parts.append(f'between({T}\\,{s:.2f}\\,{e:.2f})*'
                      f'max(0\\,min(1\\,min(({T}-{s:.2f})/{ZOOM_EASE}\\,({e:.2f}-{T})/{ZOOM_EASE})))')
     return f'1+{ZOOM_MAX - 1:.3f}*({"+".join(parts)})', len(merged)
+
+
+def _cut_punch_expr(segs):
+    """Alternate a subtle punch-in across cuts (camera mode).
+
+    A single continuous shot makes every cut a jump cut. Swapping between the normal frame and a
+    slightly tighter one at each cut is the standard talking-head trick: the jump reads as a
+    deliberate reframe. The punch holds flat for the whole segment - easing would just look like
+    drift - so the change lands exactly on the cut."""
+    T = f'(on/{FPS})'
+    parts, acc, n = [], 0.0, 0
+    for i, (s, e) in enumerate(segs):
+        d = e - s
+        if i % 2 == 1 and n < ZOOM_MAX_TURNS:
+            parts.append(f'between({T}\\,{acc:.2f}\\,{acc + d:.2f})')
+            n += 1
+        acc += d
+    if not parts:
+        return None, 0
+    return f'1+{CUT_PUNCH - 1:.3f}*({"+".join(parts)})', n
 
 
 def _font_file(name):
@@ -432,10 +453,11 @@ Style: BoxHook,{font},66,{hook_box},{hook_box},&H00000000,&H00000000,0,0,0,0,100
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
+    cap_on = cfg.get('captions', True)                     # camera mode can switch the burn-in off
     rounded = str(st.get('corners', '')).lower() == 'rounded'
     meas72 = _measurer(font, 72) if rounded else None
     meas66 = _measurer(font, 66) if rounded else None
-    if cfg.get('hook'):
+    if cfg.get('hook') and cap_on:
         hook_end = min(float(cfg.get('hook_seconds', HOOK_SECONDS)), total)
         if rounded:
             yc = 244.0                                     # first hook line sits where the banner used to
@@ -449,7 +471,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         else:
             ass += (f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,"
                     f"{{\\fad(0,350)}}{cfg['hook'].upper()}\n")
-    for i, c in enumerate(cards):
+    for i, c in enumerate(cards if cap_on else []):
         s = to_out(c[0][0]['s'])
         e = to_out(cards[i + 1][0][0]['s']) if i + 1 < len(cards) else total
         e = min(e, to_out(c[-1][0]['e']) + 0.6)
@@ -476,6 +498,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     zexpr, zturns = None, 0
     if cfg.get('zoom_turns'):
         zexpr, zturns = _zoom_expr([(to_out(s), to_out(e)) for s, e in cfg['zoom_turns']], total)
+    elif cfg.get('zoom_cuts') and len(segs) > 1:           # camera mode: punch in on alternate segments
+        zexpr, zturns = _cut_punch_expr(segs)
     zoom_filter = ('' if not zexpr else
                    f",zoompan=z='{zexpr}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps={FPS}")
 
