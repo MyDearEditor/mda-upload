@@ -222,15 +222,24 @@ def sync_offset(video, audio, tmp):
     adur, vdur = len(a) / 8000.0, len(v) / 8000.0
     EPS = 8000 // HOP                             # envelope points per second (50)
 
+    misses = []                                   # (candidate, halves-difference) for the log
+
     def halves_agree_at(off_s):
         """Validate a candidate offset using ONLY the stretch of the recording that overlaps the video:
         both halves of that overlap must independently land on (nearly) the same offset. This also
-        works when the video is just a short snippet of a much longer call."""
+        works when the video is just a short snippet of a much longer call.
+
+        The tolerance grows with call length: the phone camera and the dialer recorder run on
+        different clocks, and a drift of a few hundred ppm - normal for phone recordings - moves the
+        halves of a 40-minute call ~half a second apart even when the match is real. A fixed 0.35 s
+        gate was rejecting exactly those calls. The renderer re-refines the offset locally around
+        every clip, so a midpoint-averaged offset is all a long, slightly drifting call needs."""
         o0, o1 = max(0.0, -off_s), min(adur, vdur - off_s)
         olap = o1 - o0
         if olap < 10:                             # too little shared time to judge (also rejected later)
             return None
         seg_need = min(15.0, max(4.0, olap / 2 - 1))   # short pairs get judged on shorter halves
+        tol = 0.35 + 0.0005 * (olap / 2)          # 0.35 s plus 500 ppm of the half-center gap
         mid = (o0 + o1) / 2.0
         got = []
         for s0, s1 in ((o0, mid), (mid, o1)):
@@ -241,7 +250,10 @@ def sync_offset(video, audio, tmp):
             seg = seg - seg.mean()
             cs = s.correlate(ev, seg, mode='full', method='fft')
             got.append(((int(np.argmax(cs)) - (len(seg) - 1)) - i0) / float(EPS))
-        return (got[0] + got[1]) / 2.0 if abs(got[0] - got[1]) <= 0.35 else None
+        if abs(got[0] - got[1]) <= tol:
+            return (got[0] + got[1]) / 2.0
+        misses.append((off_s, abs(got[0] - got[1])))
+        return None
 
     # candidate offsets: the global peak, plus what each half of the whole recording suggests on its own
     # (with a snippet video the global peak can land in the wrong place; one of these usually has it)
@@ -262,7 +274,8 @@ def sync_offset(video, audio, tmp):
             off, agree = got, True
             break
     detail = (f'overlap halves agree at {off:+.1f}s' if agree else
-              'no overlap agreement (candidates ' + ', '.join(f'{t:+.1f}s' for t in tried) + ')')
+              'no overlap agreement (' + ', '.join(f'{t:+.1f}s' for t in tried) +
+              ('; halves differ by ' + ', '.join(f'{d:.2f}s at {t:+.1f}s' for t, d in misses) if misses else '') + ')')
     # sample-accurate refine on a 20 s window in the middle of the overlap
     adur, vdur = len(a) / 8000.0, len(v) / 8000.0
     o0, o1 = max(0.0, -off), min(adur, vdur - off)
