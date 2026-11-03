@@ -263,24 +263,30 @@ def sync_offset(video, audio, tmp):
         misses.append((off_s, abs(got[0] - got[1])))
         return None
 
+    fitnotes = []                                 # per-segment offsets of a failed fit, for the log
+
     def drift_fit_at(off_s):
         """The halves disagreeing does not always mean different calls: it can mean two clocks at
-        different speeds. Split the overlap into quarters and correlate each on its own - a real
-        match with drift puts all four offsets on one clean straight line, whose slope IS the
-        drift; two different calls scatter. Returns (offset at overlap midpoint, drift) or None."""
+        different speeds, or a recorder that paused. Split the overlap into eighths and correlate
+        each on its own - a real match puts the offsets on a straight line (the slope IS the
+        drift); a paused recorder gives line segments; two different calls scatter. The longest
+        contiguous run of segments that agree on one line wins, and the edit is confined to the
+        stretch of the call that run covers. Returns (offset at that stretch's midpoint, drift,
+        window start, window end) or None."""
         o0, o1 = max(0.0, -off_s), min(adur, vdur - off_s)
         olap = o1 - o0
         if olap < 120:                            # drift is invisible on short calls
             return None
-        # each quarter searches only a drift-sized window around the candidate: the candidate came
-        # from a strong peak, and an open search lets a quiet quarter latch onto a false peak far away
+        N = 8 if olap >= 320 else 4
+        # each segment searches only a drift-sized window around the candidate: the candidate came
+        # from a strong peak, and an open search lets a quiet segment latch onto a false peak far away
         W = 0.005 * olap / 2 + 1.5                # the widest offset swing a plausible drift allows
         pts = []
-        for q in range(4):
-            s0, s1 = o0 + olap * q / 4, o0 + olap * (q + 1) / 4
+        for q in range(N):
+            s0, s1 = o0 + olap * q / N, o0 + olap * (q + 1) / N
             i0 = int(s0 * EPS)
             seg = ea[i0:int(s1 * EPS)]
-            if len(seg) < 30 * EPS:
+            if len(seg) < 25 * EPS:
                 return None
             seg = seg - seg.mean()
             cs = s.correlate(ev, seg, mode='full', method='fft')
@@ -291,13 +297,44 @@ def sync_offset(video, audio, tmp):
                 return None
             k = k0 + int(np.argmax(cs[k0:k1]))
             pts.append(((s0 + s1) / 2.0, (k - base) / float(EPS)))
-        ts = np.array([p[0] for p in pts]); offs = np.array([p[1] for p in pts])
-        slope, icpt = np.polyfit(ts, offs, 1)
-        resid = float(np.abs(offs - (slope * ts + icpt)).max())
-        if resid > max(0.4, abs(slope) * olap / 8) or abs(slope) > 0.005:   # not a clean line: reject
+        # consensus line: every pair proposes one; the best is the one most points sit on
+        best = None
+        for i in range(len(pts)):
+            for j in range(i + 1, len(pts)):
+                sl = (pts[j][1] - pts[i][1]) / (pts[j][0] - pts[i][0])
+                if abs(sl) > 0.005:
+                    continue
+                ic = pts[i][1] - sl * pts[i][0]
+                tol_in = max(0.4, abs(sl) * olap / 8)
+                inl = [q for q in range(len(pts)) if abs(pts[q][1] - (sl * pts[q][0] + ic)) <= tol_in]
+                if best is None or len(inl) > len(best):
+                    best = inl
+        fitnotes.append((off_s, ' '.join(f'{p[1]:+.2f}' for p in pts)))
+        if best is None:
             return None
-        mid = (o0 + o1) / 2.0
-        return float(slope * mid + icpt), float(slope)
+        # the window we trust is the longest CONTIGUOUS run of agreeing segments - with a paused
+        # recorder the call splits into regions, and mixing them would misalign half the clips
+        runs, cur = [], []
+        for q in range(len(pts)):
+            if q in best:
+                cur.append(q)
+            else:
+                if cur: runs.append(cur)
+                cur = []
+        if cur: runs.append(cur)
+        run = max(runs, key=len) if runs else []
+        if len(run) < max(3, N // 2):             # trust nothing shorter than half the call
+            return None
+        rp = [pts[q] for q in run]
+        ts = np.array([p[0] for p in rp]); offs = np.array([p[1] for p in rp])
+        slope, icpt = (np.polyfit(ts, offs, 1) if len(rp) > 1 else (0.0, offs[0]))
+        if abs(slope) > 0.005:
+            return None
+        w0 = o0 + olap * run[0] / N
+        w1 = o0 + olap * (run[-1] + 1) / N
+        mid = (w0 + w1) / 2.0
+        fitnotes.pop()                            # it worked; no note needed
+        return float(slope * mid + icpt), float(slope), float(w0), float(w1)
 
     # candidate offsets: the global peak, plus what each half of the whole recording suggests on its own
     # (with a snippet video the global peak can land in the wrong place; one of these usually has it)
@@ -317,19 +354,24 @@ def sync_offset(video, audio, tmp):
         if got is not None:
             off, agree = got, True
             break
+    win = None
     if not agree:
         for cand in tried:                        # second look: is this a drifting clock, not a mismatch?
             fit = drift_fit_at(cand)
             if fit is not None:
                 off, drift, agree = fit[0], fit[1], True
+                win = (fit[2], fit[3])
                 break
-    detail = ((f'overlap halves agree at {off:+.1f}s' if not drift else
-               f'drift fit at {off:+.1f}s mid, {drift * 1e6:+.0f} ppm') if agree else
+    detail = ((f'overlap halves agree at {off:+.1f}s' if not drift and not win else
+               f'drift fit at {off:+.1f}s mid, {drift * 1e6:+.0f} ppm, window {win[0]:.0f}-{win[1]:.0f}s') if agree else
               'no overlap agreement (' + ', '.join(f'{t:+.1f}s' for t in tried) +
-              ('; halves differ by ' + ', '.join(f'{d:.2f}s at {t:+.1f}s' for t, d in misses) if misses else '') + ')')
-    # sample-accurate refine on a 20 s window in the middle of the overlap
+              ('; halves differ by ' + ', '.join(f'{d:.2f}s at {t:+.1f}s' for t, d in misses) if misses else '') +
+              ('; seg offsets ' + '; '.join(f'[{p}] at {t:+.1f}s' for t, p in fitnotes) if fitnotes else '') + ')')
+    # sample-accurate refine on a 20 s window in the middle of the overlap (or the trusted window)
     adur, vdur = len(a) / 8000.0, len(v) / 8000.0
     o0, o1 = max(0.0, -off), min(adur, vdur - off)
+    if win:
+        o0, o1 = max(o0, win[0]), min(o1, win[1])
     if o1 - o0 > 12:
         W = min(20.0, o1 - o0 - 4)
         ta = max(o0 + 1, (o0 + o1) / 2 - W / 2)
@@ -341,7 +383,7 @@ def sync_offset(video, audio, tmp):
             off = (tv0 + float(np.argmax(cc)) / 8000.0) - ta
     # agreement across independent windows is the real gate; the peak score is kept for the logs
     conf = max(peak_z, MIN_SYNC_CONFIDENCE) if agree else 0.0
-    return float(off), conf, f'peak {peak_z:.1f}, {detail}', float(drift)
+    return float(off), conf, f'peak {peak_z:.1f}, {detail}', float(drift), win
 
 
 # Calibrated against a real headphone call (separation 1.66-1.83, coherence 80-82%) and a synthetic
@@ -945,7 +987,7 @@ def process(call):
 
         log.info('%s: syncing', cid)
         tell(18, 'Lining the call audio up with your video')
-        offset, conf, detail, drift = sync_offset(video, audio, d)
+        offset, conf, detail, drift, win = sync_offset(video, audio, d)
         vdur = media_duration(video)
         adur = media_duration(audio)
         log.info('%s: offset %.3f confidence %.1f (%s) | video %s, recording %s',
@@ -958,13 +1000,17 @@ def process(call):
         # RULE: edit only where there is video. Audio t = video t - offset, so the usable call window is:
         a_min = max(0.0, -offset) + 0.5
         a_max = min(adur, vdur - offset) - 0.5
+        # a drift fit may also confine us to the stretch of the call it could actually verify
+        if win:
+            a_min = max(a_min, win[0] + 0.5)
+            a_max = min(a_max, win[1] - 0.5)
         # on a drifting call the offset is only exact at the middle; keep the edges clear of the
         # worst-case misalignment, and give every later cut its own drift-corrected offset
         if drift:
             pad = abs(drift) * (a_max - a_min) / 2 + 0.5
             a_min += pad
             a_max -= pad
-        mid_o = (a_min + a_max) / 2.0
+        mid_o = (win[0] + win[1]) / 2.0 if win else (a_min + a_max) / 2.0
         off_at = lambda t: offset + drift * (t - mid_o)   # noqa: E731
         log.info('%s: video %.0fs, recording %.0fs, usable window %.1f-%.1f s (%.0fs)', cid, vdur, adur, a_min, a_max, a_max - a_min)
         # a sync-only job just needs enough shared time to line up; clips need room to cut from
@@ -993,7 +1039,8 @@ def process(call):
 
         # always deliver the full synced video (original quality, clean call audio) so agents can edit themselves
         try:
-            full = synced_full_video(video, audio, offset, a_min, a_max, os.path.join(d, 'out', 'full.mp4'), drift)
+            full = synced_full_video(video, audio, off_at((a_min + a_max) / 2), a_min, a_max,
+                                     os.path.join(d, 'out', 'full.mp4'), drift)
             fid_full = drive_upload(full, f'Full call (synced audio) - {stamp}.mp4', dest, 'video/mp4')
             log.info('%s: delivered full synced video (%.0fs)', cid, a_max - a_min)
             tell(30, 'Full synced video delivered')
