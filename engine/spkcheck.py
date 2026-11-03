@@ -70,7 +70,7 @@ def main():
         v_path = E.drive_download(vid['id'], os.path.join(d, 'video.bin'))
         a_path = E.drive_download(aud['id'], os.path.join(d, 'call.bin'))
 
-        offset, conf, detail = E.sync_offset(v_path, a_path, d)
+        offset, conf, detail = E.sync_offset(v_path, a_path, d)[:3]
         print('  sync  : offset %.3f confidence %.1f (%s)' % (offset, conf, detail))
 
         import scipy.io.wavfile as wav

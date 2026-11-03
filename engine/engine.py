@@ -170,13 +170,21 @@ def wav8k(src, dst):
     return x.astype(np.float32)
 
 
-def synced_full_video(video, audio, offset, a_min, a_max, out):
-    """Original phone video (no re-encode) with the clean call audio replacing the phone audio, trimmed to the overlap."""
-    v0 = a_min + offset
+def synced_full_video(video, audio, offset, a_min, a_max, out, drift=0.0):
+    """Original phone video (no re-encode) with the clean call audio replacing the phone audio, trimmed to the overlap.
+
+    offset is the value at the middle of [a_min, a_max]. When the two clocks drift, the audio is
+    time-stretched by the measured factor (a few hundred ppm - inaudible) so it stays locked to the
+    video across the whole call instead of only at the middle."""
+    mid = (a_min + a_max) / 2.0
+    v0 = a_min + offset + drift * (a_min - mid)   # offset AT a_min, so the stretch anchors correctly
     dur = a_max - a_min
-    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', f'{v0:.3f}', '-t', f'{dur:.3f}', '-i', video,
-                    '-ss', f'{a_min:.3f}', '-t', f'{dur:.3f}', '-i', audio,
-                    '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-shortest', '-movflags', '+faststart', out], check=True)
+    cmd = ['ffmpeg', '-v', 'error', '-y', '-ss', f'{v0:.3f}', '-t', f'{dur * (1 + drift):.3f}', '-i', video,
+           '-ss', f'{a_min:.3f}', '-t', f'{dur:.3f}', '-i', audio,
+           '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k']
+    if abs(drift) > 5e-5:
+        cmd += ['-af', f'atempo={1.0 / (1.0 + drift):.8f}']
+    subprocess.run(cmd + ['-shortest', '-movflags', '+faststart', out], check=True)
     return out
 
 
@@ -255,6 +263,42 @@ def sync_offset(video, audio, tmp):
         misses.append((off_s, abs(got[0] - got[1])))
         return None
 
+    def drift_fit_at(off_s):
+        """The halves disagreeing does not always mean different calls: it can mean two clocks at
+        different speeds. Split the overlap into quarters and correlate each on its own - a real
+        match with drift puts all four offsets on one clean straight line, whose slope IS the
+        drift; two different calls scatter. Returns (offset at overlap midpoint, drift) or None."""
+        o0, o1 = max(0.0, -off_s), min(adur, vdur - off_s)
+        olap = o1 - o0
+        if olap < 120:                            # drift is invisible on short calls
+            return None
+        # each quarter searches only a drift-sized window around the candidate: the candidate came
+        # from a strong peak, and an open search lets a quiet quarter latch onto a false peak far away
+        W = 0.005 * olap / 2 + 1.5                # the widest offset swing a plausible drift allows
+        pts = []
+        for q in range(4):
+            s0, s1 = o0 + olap * q / 4, o0 + olap * (q + 1) / 4
+            i0 = int(s0 * EPS)
+            seg = ea[i0:int(s1 * EPS)]
+            if len(seg) < 30 * EPS:
+                return None
+            seg = seg - seg.mean()
+            cs = s.correlate(ev, seg, mode='full', method='fft')
+            base = len(seg) - 1 + i0              # cs index whose lag is offset 0
+            k0 = max(0, base + int((off_s - W) * EPS))
+            k1 = min(len(cs), base + int((off_s + W) * EPS))
+            if k1 - k0 < EPS:
+                return None
+            k = k0 + int(np.argmax(cs[k0:k1]))
+            pts.append(((s0 + s1) / 2.0, (k - base) / float(EPS)))
+        ts = np.array([p[0] for p in pts]); offs = np.array([p[1] for p in pts])
+        slope, icpt = np.polyfit(ts, offs, 1)
+        resid = float(np.abs(offs - (slope * ts + icpt)).max())
+        if resid > max(0.4, abs(slope) * olap / 8) or abs(slope) > 0.005:   # not a clean line: reject
+            return None
+        mid = (o0 + o1) / 2.0
+        return float(slope * mid + icpt), float(slope)
+
     # candidate offsets: the global peak, plus what each half of the whole recording suggests on its own
     # (with a snippet video the global peak can land in the wrong place; one of these usually has it)
     half = len(ea) // 2
@@ -264,7 +308,7 @@ def sync_offset(video, audio, tmp):
         if len(seg) >= 1500:
             cs = s.correlate(ev, seg, mode='full', method='fft')
             cands.append(((int(np.argmax(cs)) - (len(seg) - 1)) - h0) / float(EPS))
-    off, agree, tried = cands[0], False, []
+    off, agree, tried, drift = cands[0], False, [], 0.0
     for cand in cands:
         if any(abs(cand - t) < 1.0 for t in tried):
             continue
@@ -273,7 +317,14 @@ def sync_offset(video, audio, tmp):
         if got is not None:
             off, agree = got, True
             break
-    detail = (f'overlap halves agree at {off:+.1f}s' if agree else
+    if not agree:
+        for cand in tried:                        # second look: is this a drifting clock, not a mismatch?
+            fit = drift_fit_at(cand)
+            if fit is not None:
+                off, drift, agree = fit[0], fit[1], True
+                break
+    detail = ((f'overlap halves agree at {off:+.1f}s' if not drift else
+               f'drift fit at {off:+.1f}s mid, {drift * 1e6:+.0f} ppm') if agree else
               'no overlap agreement (' + ', '.join(f'{t:+.1f}s' for t in tried) +
               ('; halves differ by ' + ', '.join(f'{d:.2f}s at {t:+.1f}s' for t, d in misses) if misses else '') + ')')
     # sample-accurate refine on a 20 s window in the middle of the overlap
@@ -290,7 +341,7 @@ def sync_offset(video, audio, tmp):
             off = (tv0 + float(np.argmax(cc)) / 8000.0) - ta
     # agreement across independent windows is the real gate; the peak score is kept for the logs
     conf = max(peak_z, MIN_SYNC_CONFIDENCE) if agree else 0.0
-    return float(off), conf, f'peak {peak_z:.1f}, {detail}'
+    return float(off), conf, f'peak {peak_z:.1f}, {detail}', float(drift)
 
 
 # Calibrated against a real headphone call (separation 1.66-1.83, coherence 80-82%) and a synthetic
@@ -894,7 +945,7 @@ def process(call):
 
         log.info('%s: syncing', cid)
         tell(18, 'Lining the call audio up with your video')
-        offset, conf, detail = sync_offset(video, audio, d)
+        offset, conf, detail, drift = sync_offset(video, audio, d)
         vdur = media_duration(video)
         adur = media_duration(audio)
         log.info('%s: offset %.3f confidence %.1f (%s) | video %s, recording %s',
@@ -907,6 +958,14 @@ def process(call):
         # RULE: edit only where there is video. Audio t = video t - offset, so the usable call window is:
         a_min = max(0.0, -offset) + 0.5
         a_max = min(adur, vdur - offset) - 0.5
+        # on a drifting call the offset is only exact at the middle; keep the edges clear of the
+        # worst-case misalignment, and give every later cut its own drift-corrected offset
+        if drift:
+            pad = abs(drift) * (a_max - a_min) / 2 + 0.5
+            a_min += pad
+            a_max -= pad
+        mid_o = (a_min + a_max) / 2.0
+        off_at = lambda t: offset + drift * (t - mid_o)   # noqa: E731
         log.info('%s: video %.0fs, recording %.0fs, usable window %.1f-%.1f s (%.0fs)', cid, vdur, adur, a_min, a_max, a_max - a_min)
         # a sync-only job just needs enough shared time to line up; clips need room to cut from
         if a_max - a_min < (10 if mode == 'sync' else 45):
@@ -934,7 +993,7 @@ def process(call):
 
         # always deliver the full synced video (original quality, clean call audio) so agents can edit themselves
         try:
-            full = synced_full_video(video, audio, offset, a_min, a_max, os.path.join(d, 'out', 'full.mp4'))
+            full = synced_full_video(video, audio, offset, a_min, a_max, os.path.join(d, 'out', 'full.mp4'), drift)
             fid_full = drive_upload(full, f'Full call (synced audio) - {stamp}.mp4', dest, 'video/mp4')
             log.info('%s: delivered full synced video (%.0fs)', cid, a_max - a_min)
             tell(30, 'Full synced video delivered')
@@ -1055,7 +1114,8 @@ def process(call):
             out = os.path.join(d, 'out', f'clip{i}.mp4')
             zturns = agent_turns(transcript, float(c['start']), float(c['end'])) if (zoom_want and spk) else None
             try:
-                res = render({'video': video, 'audio': audio, 'offset': offset, 'transcript': tpath,
+                res = render({'video': video, 'audio': audio,
+                              'offset': off_at((float(c['start']) + float(c['end'])) / 2), 'transcript': tpath,
                               'start': float(c['start']), 'end': float(c['end']), 'hook': hook, 'out': out,
                               'bleep_words': name_keys, 'cut_spans': cut_spans, 'gap_max': 0.5, 'gap_pad': 0.15,
                               'style': style, 'zoom_turns': zturns, 'name_mode': name_mode})
