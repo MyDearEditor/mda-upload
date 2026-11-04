@@ -128,6 +128,18 @@ def drive_upload(path, name, parent_id, mime):
     raise RuntimeError('upload ended without a file id')
 
 
+def clip_thumb(clip_path, out_dir, i, parent_id):
+    """A real photo for the site's clip gallery: one frame from the clip, 480px wide."""
+    try:
+        tp = os.path.join(out_dir, f'thumb{i}.jpg')
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', '1', '-i', clip_path,
+                        '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '5', tp], check=True)
+        return drive_upload(tp, f'preview{i}.jpg', parent_id, 'image/jpeg')
+    except Exception as ex:
+        log.warning('thumbnail for clip %s failed: %s', i, ex)
+        return ''
+
+
 def drive_mkdir(name, parent_id):
     """Create a subfolder under parent_id and return its id."""
     r = requests.post('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true',
@@ -1067,12 +1079,21 @@ def process_job(call, cid, d, job, tell):
                 return
             tell(85, 'Swapping in the fixed clip')
             drive_update(rec['file_id'], res['out'], 'video/mp4')
+            if rec.get('thumb_id'):                   # the preview photo keeps up with the fixed captions
+                try:
+                    tp = os.path.join(d, 'out', 'fixthumb.jpg')
+                    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss', '1', '-i', res['out'],
+                                    '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '5', tp], check=True)
+                    drive_update(rec['thumb_id'], tp, 'image/jpeg')
+                except Exception as ex:
+                    log.warning('%s: thumb refresh failed: %s', cid, ex)
             rec['caption_text'] = res['caption_text']
             json.dump(state, open(spath, 'w'))
             drive_update(state_id, spath, 'application/json')
             api('engineDone', callId=cid, clipFileIds=[c['file_id'] for c in state['clips']],
                 clipCount=len(state['clips']), folderId=folder, kind='fix', fixedClip=n,
-                captions=[c['caption_text'] for c in state['clips']])
+                captions=[c['caption_text'] for c in state['clips']],
+                thumbs=[c.get('thumb_id', '') for c in state['clips']])
             log.info('%s: fixed clip %d ("%s" -> "%s", %d spot(s))', cid, n, frm, to, count)
             return
 
@@ -1162,6 +1183,7 @@ def process_job(call, cid, d, job, tell):
                 except Exception:
                     clip_dest = folder
                 fid = drive_upload(out, name + '.mp4', clip_dest, 'video/mp4')
+                tid = clip_thumb(out, os.path.join(d, 'out'), i, clip_dest)
                 caption = str(copy.get('ig_caption', '')).strip()
                 try:
                     txt = os.path.join(d, 'out', f'clip{i}.txt')
@@ -1170,7 +1192,7 @@ def process_job(call, cid, d, job, tell):
                 except Exception:
                     pass
                 state['clips'].append({'i': i, 'start': fit[0], 'end': fit[1], 'hook': hook, 'name': name,
-                                       'file_id': fid, 'folder_id': clip_dest,
+                                       'file_id': fid, 'folder_id': clip_dest, 'thumb_id': tid,
                                        'caption_text': res['caption_text'], 'zoom_turns': zturns,
                                        'ig_caption': caption})
                 new_ids.append(fid)
@@ -1182,7 +1204,8 @@ def process_job(call, cid, d, job, tell):
             drive_update(state_id, spath, 'application/json')
             api('engineDone', callId=cid, clipFileIds=[c['file_id'] for c in state['clips']],
                 clipCount=len(state['clips']), folderId=folder, kind='more', newCount=len(new_ids),
-                captions=[c['caption_text'] for c in state['clips']])
+                captions=[c['caption_text'] for c in state['clips']],
+                thumbs=[c.get('thumb_id', '') for c in state['clips']])
             log.info('%s: done, %d extra clip(s) delivered', cid, len(new_ids))
             return
 
@@ -1446,6 +1469,7 @@ def process(call):
                             cid, folder_title, ex)
                 clip_dest = dest
             fid = drive_upload(out, name + '.mp4', clip_dest, 'video/mp4')
+            tid = clip_thumb(out, os.path.join(d, 'out'), i, clip_dest)
 
             # clip sheet: thumbnail, copy-and-paste caption, and why it was cut this way
             caption = str(c.get('ig_caption', '')).strip()
@@ -1468,7 +1492,7 @@ def process(call):
             delivered.append(fid)
             state_clips.append({'i': len(delivered), 'start': float(c['start']), 'end': float(c['end']),
                                 'hook': hook, 'name': name, 'file_id': fid, 'folder_id': clip_dest,
-                                'caption_text': res['caption_text'], 'zoom_turns': zturns,
+                                'thumb_id': tid, 'caption_text': res['caption_text'], 'zoom_turns': zturns,
                                 'ig_caption': str(c.get('ig_caption', '')).strip()})
             log.info('%s: delivered "%s" (%.0fs, %d bleeps%s)', cid, hook, res['duration'], res['bleeps'],
                      ', HDR->709' if res.get('hdr') else '')
@@ -1489,7 +1513,8 @@ def process(call):
             except Exception as ex:                   # jobs just won't be available for this call
                 log.warning('%s: could not park edit state: %s', cid, ex)
             api('engineDone', callId=cid, clipFileIds=delivered, clipCount=len(delivered), folderId=dest,
-                captions=[sc['caption_text'] for sc in state_clips], notes=tips)
+                captions=[sc['caption_text'] for sc in state_clips], notes=tips,
+                thumbs=[sc.get('thumb_id', '') for sc in state_clips])
             log.info('%s: done, %d delivered, %d dropped', cid, len(delivered), len(dropped))
         elif fid_full:
             api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest, notes=tips)
