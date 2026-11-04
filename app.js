@@ -166,7 +166,8 @@
   }
 
   // ---------------------------------------------------------------- views
-  var views = ['gate1', 'gate2', 'join', 'login', 'upload', 'mine', 'style', 'guide', 'admin'];
+  var views = ['gate1', 'gate2', 'join', 'login', 'upload', 'mine', 'clips', 'style', 'guide', 'admin'];
+  var lastCalls = null;                        // freshest myCalls rows, shared by the dup check and views
   function show(v) {
     views.forEach(function (x) { $('view-' + x).classList.toggle('hidden', x !== v); });
     var el = $('view-' + v); el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter');
@@ -175,6 +176,7 @@
     eagleSchedule(['gate1', 'gate2', 'join', 'login'].indexOf(v) >= 0 ? 'gate' : (v === 'upload' ? 'upload' : 'off'));
     document.querySelectorAll('.navbtn[data-view]').forEach(function (b) { b.classList.toggle('active', b.dataset.view === v); });
     if (v === 'mine') loadMine();
+    if (v === 'clips') loadClips();
     if (v === 'style') loadStyle();
     if (v === 'admin') { loadStats(); loadAgents(); loadLog(); }
   }
@@ -183,11 +185,13 @@
     if (!on) session = null;
     $('nav').classList.toggle('hidden', !on);
     $('guide-cta').classList.toggle('hidden', !on);
+    $('suggest-fab').classList.toggle('hidden', !on);
     if (!on) return show('gate1');
     $('who').textContent = session.display_name;
     var admin = !!session.admin;
     $('hud-count').textContent = admin ? 'ADMIN MODE' : 'HEY ' + String(session.display_name).split(' ')[0].toUpperCase();
     if (!admin) api({ action: 'myCalls' }).then(function (j) {
+      lastCalls = j.calls;
       var week = Date.now() - 7 * 86400000;
       var n = j.calls.filter(function (c) { return new Date(c.uploaded_at).getTime() > week; }).length;
       $('hud-count').textContent = n + ' CALL' + (n === 1 ? '' : 'S') + ' UPLOADED THIS WEEK';
@@ -196,6 +200,8 @@
     document.querySelector('.navbtn[data-view="upload"]').classList.toggle('hidden', admin);
     document.querySelector('.navbtn[data-view="mine"]').classList.toggle('hidden', admin);
     document.querySelector('.navbtn[data-view="style"]').classList.toggle('hidden', admin);
+    document.querySelector('.navbtn[data-view="clips"]').classList.toggle('hidden', admin);
+    if (admin) $('suggest-fab').classList.add('hidden');
     show(admin ? 'admin' : 'upload');
   }
   function signOut() { session = null; save('mda_session', null); applySession(); }
@@ -264,6 +270,30 @@
   window.addEventListener('beforeunload', function (e) { if (uploading) { e.preventDefault(); e.returnValue = ''; } });
 
   $('upload-btn').onclick = function () {
+    if (uploading || !files.video || (!files.audio && curMode() !== 'camera')) return;
+    // same files as a recent upload? warn before burning another upload on it
+    var vMB = Math.round(files.video.size / 1048576);
+    var aMB = files.audio ? Math.round(files.audio.size / 1048576) : 0;
+    var week = Date.now() - 7 * 86400000;
+    var prior = (lastCalls || []).filter(function (c) {
+      return new Date(c.uploaded_at).getTime() > week && vMB > 0 && Number(c.video_MB) === vMB &&
+             (curMode() === 'camera' ? Number(c.audio_MB) === 0 : Number(c.audio_MB) === aMB);
+    })[0];
+    if (prior) {
+      $('dup-text').innerHTML = 'These look like the <b>same files</b> you uploaded ' + esc(fmtDate(prior.uploaded_at)) +
+        (prior.note ? ' ("' + esc(prior.note) + '")' : '') + ' — that call is marked <b>' + esc(prior.status) + '</b>. ' +
+        (prior.status === 'Problem'
+          ? 'Re-uploading the same files gives the same result — if something looks wrong, tell Mason instead.'
+          : prior.status === 'Ready' ? 'Your clips for it are already in your Drive folder.'
+          : 'It is still being worked on — no need to send it again.');
+      $('dup-modal').classList.remove('hidden');
+      return;
+    }
+    beginUpload();
+  };
+  $('dup-go').onclick = function () { $('dup-modal').classList.add('hidden'); beginUpload(); };
+  $('dup-no').onclick = function () { $('dup-modal').classList.add('hidden'); };
+  function beginUpload() {
     if (uploading || !files.video || (!files.audio && curMode() !== 'camera')) return;
     uploading = true; $('upload-btn').disabled = true; $('upload-err').textContent = '';
     progress.video = progress.audio = 0; lastMilestone = 0; $('total-fill').style.width = '0%'; $('total-pct').textContent = '0%'; $('total-wrap').classList.remove('hidden');
@@ -477,18 +507,25 @@
   function loadMine() {
     var el = $('mine-list'); el.innerHTML = '<div class="empty">Loading…</div>';
     api({ action: 'myCalls' }).then(function (j) {
+      lastCalls = j.calls;
       $('my-folder').href = j.folder_url;
       if (!j.calls.length) { el.innerHTML = '<div class="empty">No uploads yet.</div>'; return; }
       el.innerHTML = j.calls.map(function (c) {
         var title = c.note ? esc(c.note) : 'Untitled call';
         var names = [];
         try { names = JSON.parse(c.clip_names || '[]') || []; } catch (e) { names = []; }
+        var canEdit = c.status === 'Ready' && c.mode !== 'sync' && c.mode !== 'camera' && !c.raw_gone;
         var body = '';
         if (c.mode === 'sync') body += '<div class="m">Synced full video — no clips were cut for this one.</div>';
         if (c.mode === 'camera') body += '<div class="m">Talking-to-camera video — retakes and dead air cut, your last take kept.</div>';
-        else if (names.length) body += '<div class="m">' + names.length + ' clip' + (names.length === 1 ? '' : 's') + ' delivered:</div><ul class="clips">' + names.map(function (n) { return '<li>🎬 ' + esc(n) + '</li>'; }).join('') + '</ul>';
+        else if (names.length) body += '<div class="m">' + names.length + ' clip' + (names.length === 1 ? '' : 's') + ' delivered:</div><ul class="clips">' + names.map(function (n, idx) {
+          return '<li>🎬 ' + esc(n) +
+            (canEdit ? ' <button class="btn tiny fixw" type="button" data-cid="' + esc(c.call_id) + '" data-clip="' + (idx + 1) + '">✏ FIX A WORD</button>' : '') + '</li>';
+        }).join('') + '</ul>';
         else if (c.status === 'Ready' && c.clips) body += '<div class="m">' + esc(c.clips) + ' clips delivered. (Clip names show here for uploads from now on.)</div>';
         else body += '<div class="m">Nothing delivered yet — this fills in when the edit finishes.</div>';
+        if (canEdit) body += '<div class="more-row"><input class="mini" type="number" min="1" max="599" placeholder="minute (optional)" data-min="' + esc(c.call_id) + '">' +
+          '<button class="btn small morec" type="button" data-cid="' + esc(c.call_id) + '">🎬 CUT MORE CLIPS</button></div>';
         if (c.folder_url) body += '<a class="btn small" href="' + esc(c.folder_url) + '" target="_blank" rel="noopener">OPEN THIS CALL\'S FOLDER ↗</a>';
         return '<div class="item call">' +
           '<button class="call-head" type="button">' +
@@ -496,7 +533,7 @@
             '<span class="call-title">' + title + (c.mode === 'sync' ? ' <span class="tag">SYNC ONLY</span>'
               : c.mode === 'camera' ? ' <span class="tag">TO CAMERA</span>' : '') + '<small>' + esc(fmtDate(c.uploaded_at)) +
             (c.status === 'Editing' && c.progress ? ' · ⚙ ' + esc(String(c.progress).split('|')[1] || 'editing') + ' — ' + esc(String(c.progress).split('|')[0] || '0') + '%' : '') + '</small></span>' +
-            '<span class="pill ' + esc(c.status) + '">' + esc(c.status) + (c.status === 'Ready' && c.clips ? ' · ' + c.clips + ' clips' : '') + '</span>' +
+            '<span class="pill ' + esc(c.status) + '">' + (c.job && c.status !== 'Ready' ? 'Re-editing' : esc(c.status)) + (c.status === 'Ready' && c.clips ? ' · ' + c.clips + ' clips' : '') + '</span>' +
           '</button>' +
           (c.problem ? '<div class="m prob">' + esc(c.problem) + '</div>' : '') +
           '<div class="call-body">' + body + '</div>' +
@@ -505,8 +542,102 @@
       el.querySelectorAll('.call-head').forEach(function (h) {
         h.addEventListener('click', function () { h.closest('.call').classList.toggle('open'); });
       });
+      el.querySelectorAll('.fixw').forEach(function (b) {
+        b.onclick = function (e) { e.stopPropagation(); openFix(b.dataset.cid, Number(b.dataset.clip)); };
+      });
+      el.querySelectorAll('.morec').forEach(function (b) {
+        b.onclick = function (e) {
+          e.stopPropagation();
+          var inp = el.querySelector('[data-min="' + b.dataset.cid + '"]');
+          var minute = inp && inp.value ? Number(inp.value) : 0;
+          b.disabled = true; b.textContent = 'ASKING THE CREW…';
+          api({ action: 'moreClips', callId: b.dataset.cid, minute: minute })
+            .then(function () { blip(); loadMine(); })
+            .catch(function (err) { b.disabled = false; b.textContent = '🎬 CUT MORE CLIPS'; window.alert(err.message); });
+        };
+      });
     }).catch(function (err) { el.innerHTML = '<div class="err">' + esc(err.message) + '</div>'; });
   }
+
+  // ---------------------------------------------------------------- fix a word
+  var fixing = null;
+  function openFix(cid, clip) {
+    var c = (lastCalls || []).filter(function (x) { return x.call_id === cid; })[0];
+    var caps = [];
+    try { caps = JSON.parse((c && c.clip_captions) || '[]') || []; } catch (e) { caps = []; }
+    fixing = { cid: cid, clip: clip };
+    $('fix-cap').textContent = caps[clip - 1] || '(The caption text for this clip is not on file — type the word exactly as it appears in the video.)';
+    $('fix-from').value = ''; $('fix-to').value = ''; $('fix-err').textContent = '';
+    $('fix-modal').classList.remove('hidden');
+    setTimeout(function () { $('fix-from').focus(); }, 150);
+  }
+  $('fix-no').onclick = function () { $('fix-modal').classList.add('hidden'); };
+  $('fix-send').onclick = function () {
+    if (!fixing) return;
+    var frm = $('fix-from').value.trim(), to = $('fix-to').value.trim();
+    if (!frm || !to) { $('fix-err').textContent = 'Fill in both boxes.'; return; }
+    $('fix-send').disabled = true; $('fix-err').textContent = '';
+    api({ action: 'fixCaption', callId: fixing.cid, clip: fixing.clip, from: frm, to: to })
+      .then(function () {
+        $('fix-send').disabled = false; $('fix-modal').classList.add('hidden'); blip(); loadMine();
+      })
+      .catch(function (err) { $('fix-send').disabled = false; $('fix-err').textContent = err.message; });
+  };
+
+  // ---------------------------------------------------------------- my clips gallery
+  function loadClips() {
+    var el = $('clip-grid'); el.innerHTML = '<div class="empty">Loading…</div>';
+    api({ action: 'myCalls' }).then(function (j) {
+      lastCalls = j.calls;
+      $('clips-folder').href = j.folder_url;
+      var tiles = [];
+      j.calls.forEach(function (c) {
+        if (c.status !== 'Ready') return;
+        var ids = [], names = [];
+        try { ids = JSON.parse(c.clip_ids || '[]') || []; } catch (e) { ids = []; }
+        try { names = JSON.parse(c.clip_names || '[]') || []; } catch (e) { names = []; }
+        ids.forEach(function (id, i) {
+          var nm = String(names[i] || 'Clip ' + (i + 1)).split(' - 20')[0];
+          tiles.push('<div class="cliptile" data-id="' + esc(id) + '">' +
+            '<div class="thumbwrap"><img loading="lazy" alt="" src="https://drive.google.com/thumbnail?id=' + esc(id) + '&sz=w400" onerror="this.parentNode.classList.add(\'noimg\')"><span class="play">▶</span></div>' +
+            '<b>' + esc(nm) + '</b><small>' + esc(fmtDate(c.uploaded_at)) + '</small>' +
+            '<a class="btn tiny dlbtn" href="https://drive.google.com/uc?export=download&id=' + esc(id) + '" target="_blank" rel="noopener">⬇ DOWNLOAD</a>' +
+            '</div>');
+        });
+      });
+      el.innerHTML = tiles.length ? tiles.join('') :
+        '<div class="empty">Your clips collect here from now on — anything cut before today lives in <a href="' + esc(j.folder_url) + '" target="_blank" rel="noopener">your Drive folder</a>.</div>';
+      el.querySelectorAll('.cliptile').forEach(function (t) {
+        t.addEventListener('click', function (e) {
+          if (e.target.closest('.dlbtn')) return;
+          window.open('https://drive.google.com/file/d/' + t.dataset.id + '/view', '_blank', 'noopener');
+        });
+      });
+    }).catch(function (err) { el.innerHTML = '<div class="err">' + esc(err.message) + '</div>'; });
+  }
+
+  // ---------------------------------------------------------------- suggestion box
+  $('suggest-fab').onclick = function () {
+    $('sug-text').value = ''; $('sug-err').textContent = ''; $('sug-ok').textContent = '';
+    $('sug-send').disabled = false;
+    $('sug-modal').classList.remove('hidden');
+    setTimeout(function () { $('sug-text').focus(); }, 150);
+  };
+  $('sug-no').onclick = function () { $('sug-modal').classList.add('hidden'); };
+  $('sug-send').onclick = function () {
+    var text = $('sug-text').value.trim();
+    if (text.length < 3) { $('sug-err').textContent = 'Write a little more first.'; return; }
+    $('sug-send').disabled = true; $('sug-err').textContent = '';
+    api({ action: 'suggest', text: text })
+      .then(function () {
+        $('sug-ok').textContent = 'SENT! Mason reads every one.'; blip();
+        setTimeout(function () { $('sug-modal').classList.add('hidden'); }, 1400);
+      })
+      .catch(function (err) { $('sug-send').disabled = false; $('sug-err').textContent = err.message; });
+  };
+  document.querySelectorAll('.modal').forEach(function (m) {
+    m.addEventListener('click', function (e) { if (e.target === m) m.classList.add('hidden'); });
+  });
 
 
   // ---------------------------------------------------------------- my style

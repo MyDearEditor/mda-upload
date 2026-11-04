@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css?v=3">
-<link rel="stylesheet" href="style.css?v=15">
+<link rel="stylesheet" href="style.css?v=16">
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
@@ -41,6 +41,7 @@
   <nav id="nav" class="nav hidden">
     <button data-view="upload" class="navbtn active">Upload</button>
     <button data-view="mine" class="navbtn">My uploads</button>
+    <button data-view="clips" class="navbtn">My clips</button>
     <button data-view="style" class="navbtn">My style</button>
     <button data-view="admin" class="navbtn admin-only hidden">Admin</button>
     <button id="logout" class="navbtn ghost">Sign out</button>
@@ -216,6 +217,15 @@
     <div class="panel glass">
       <div class="row"><div class="panel-title">▶ MY UPLOADS</div><a class="btn small" id="my-folder" target="_blank" rel="noopener">OPEN MY CLIPS FOLDER ↗</a></div>
       <div id="mine-list" class="list"></div>
+    </div>
+  </section>
+
+  <!-- ============ MY CLIPS ============ -->
+  <section id="view-clips" class="view hidden">
+    <div class="panel glass">
+      <div class="row"><div class="panel-title">▶ MY CLIPS</div><a class="btn small" id="clips-folder" target="_blank" rel="noopener">OPEN MY CLIPS FOLDER ↗</a></div>
+      <p class="m">Tap a clip to preview it. Clips land here the moment they're delivered.</p>
+      <div id="clip-grid" class="clipgrid"></div>
     </div>
   </section>
 
@@ -401,11 +411,35 @@
     </div>
   </section>
 
+  <!-- ============ MODALS + SUGGESTION BOX ============ -->
+  <div class="modal hidden" id="dup-modal"><div class="modal-box">
+    <div class="panel-title">▶ HOLD ON A SECOND</div>
+    <p class="m" id="dup-text"></p>
+    <div class="modal-row"><button class="btn gold" id="dup-go" type="button">UPLOAD ANYWAY</button><button class="btn" id="dup-no" type="button">NEVER MIND</button></div>
+  </div></div>
+  <div class="modal hidden" id="fix-modal"><div class="modal-box">
+    <div class="panel-title">▶ FIX A WORD</div>
+    <p class="m">We re-cut the clip with your correction and swap the file in place — same name, same link.</p>
+    <div class="cap" id="fix-cap"></div>
+    <label>THE WRONG WORD <small>(exactly as the captions show it)</small><input id="fix-from" maxlength="60"></label>
+    <label>IT SHOULD SAY<input id="fix-to" maxlength="60"></label>
+    <div class="modal-row"><button class="btn gold" id="fix-send" type="button">RE-CUT THIS CLIP</button><button class="btn" id="fix-no" type="button">CANCEL</button></div>
+    <p class="err" id="fix-err"></p>
+  </div></div>
+  <div class="modal hidden" id="sug-modal"><div class="modal-box">
+    <div class="panel-title">▶ SUGGEST SOMETHING</div>
+    <p class="m">What would make MyDear.Editor better for you? This goes straight to Mason.</p>
+    <textarea id="sug-text" maxlength="1000" rows="5" placeholder="e.g. Let me pick which clip gets cut first…"></textarea>
+    <div class="modal-row"><button class="btn gold" id="sug-send" type="button">SEND IT</button><button class="btn" id="sug-no" type="button">CANCEL</button></div>
+    <p class="err" id="sug-err"></p><p class="status" id="sug-ok"></p>
+  </div></div>
+  <button class="suggest-fab hidden" id="suggest-fab" type="button" title="Suggest a feature">💡 SUGGEST</button>
+
   <div class="sign" aria-hidden="true"><div class="sign-board">WE EDIT FOR YOU<br>SO YOU CAN<br>FOCUS ON SELLING.<div class="crown">👑</div></div><div class="sign-post"></div></div>
 </main>
 
 <footer class="foot">MYDEAR ACADEMY</footer>
 <script src="config.js?v=4"></script>
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>
