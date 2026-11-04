@@ -163,10 +163,10 @@ input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255,204,26,.
 /* ---------- EDITOR ISLAND: no box - the page itself cuts to a floating island ---------- */
 .island-scene { position: relative; text-align: center; max-width: 860px; margin: 0 auto 22px; color: var(--text); }
 .island-scene .done-badge { margin-bottom: 6px; }
-.isl-title { font-family: var(--font-pixel); font-size: clamp(20px, 4.5vw, 34px); margin: 2px 0 0; color: var(--gold);
+.isl-title { font-family: var(--font-pixel); font-size: clamp(20px, 4.5vw, 34px); margin: 2px 0 16px; color: var(--gold);
   text-shadow: 3px 3px 0 #3a1a00, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000; letter-spacing: 2px; }
 .isl-stage { position: relative; width: min(80vw, 1180px); aspect-ratio: 48 / 23; left: 50%; transform: translateX(-50%);
-  margin: 30px 0 34px; overflow: visible; }
+  margin: 110px 0 30px; overflow: visible; }
 #editor-island.flying .isl-stage > * { animation: islFly 2.2s cubic-bezier(.2,.85,.3,1) both; }
 @keyframes islFly { 0% { transform: scale(.05) translateY(-1100px); opacity: .25; } 55% { opacity: 1; } 100% { transform: none; opacity: 1; } }
 body.on-island .steps { display: none; }
@@ -262,6 +262,20 @@ body.on-island .steps { display: none; }
 .isl-done .islndr.c2 { animation-delay: .25s !important; }
 .isl-done .islndr.c3 { animation-delay: .37s !important; }
 @keyframes islDance { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-16px) rotate(4deg); } }
+/* upload landed: the eagles pass, the crew dances, then everyone runs into the theater with your files */
+.isl-party .islndr { animation: islDance .5s ease-in-out infinite !important; }
+.isl-party .islndr::before { animation: none !important; transform: none !important; background-position-x: -192px !important; }
+.isl-party .islndr.c1 { animation-delay: .12s !important; }
+.isl-party .islndr.c2 { animation-delay: .25s !important; }
+.isl-party .islndr.c3 { animation-delay: .37s !important; }
+.isl-runin .islndr { left: 46% !important; bottom: 71% !important; opacity: 0; animation: none !important;
+  transition: left 1.3s ease-in, bottom 1.3s ease-in, opacity .35s linear 1.15s; }
+.isl-runin .islndr::before { transform: none !important; animation: islWork .3s steps(1) infinite !important; }
+.isl-runin .ntag { opacity: 0; transition: opacity .3s linear; }
+@media (max-width: 700px) {
+  .isl-party .islndr::before { background-position-x: -128px !important; }
+  .isl-runin .islndr::before { animation: islWorkS .3s steps(1) infinite !important; }
+}
 .isl-confetti { position: absolute; inset: 0; pointer-events: none; }
 .isl-confetti i { position: absolute; top: -8px; width: 7px; height: 7px; opacity: 0; }
 .isl-done .isl-confetti i { animation: islConf 2.4s linear infinite; }
@@ -663,6 +677,11 @@ input[type="color"] { height: 48px; padding: 4px; cursor: pointer; }
 .cliptile:hover .play { opacity: 1; }
 
 /* my uploads: fix + more controls */
+/* the clapperboard crest on the theater roof: fills the air up to the title, never the logo */
+.isl-stage .isl-clap { position: absolute; left: 50%; transform: translateX(-50%); bottom: 93%; width: 12%;
+  z-index: 1; image-rendering: pixelated; animation: clapBob 5s ease-in-out infinite; }
+@keyframes clapBob { 0%, 100% { margin-bottom: 0 } 50% { margin-bottom: 6px } }
+
 /* the EDITOR ISLAND movie theater: middle 50% of the island, planted on the back 30% */
 .isl-stage .isl-theater { position: absolute; left: 25%; width: 50%; bottom: 75%; z-index: 1;
   image-rendering: pixelated; filter: drop-shadow(0 6px 0 rgba(0, 0, 0, .25)); }

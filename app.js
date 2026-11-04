@@ -318,7 +318,10 @@
         document.body.classList.add('shake'); setTimeout(function () { document.body.classList.remove('shake'); }, 500);
         jingle(); flock();                       // 10 eagles from all directions + screech + level-complete jingle
         islandSet(100, 'FILES LANDED — THE CREW TAKES OVER!');
-        setTimeout(function () { islandEditing(callId); }, 2200);
+        var isl = $('editor-island');            // the eagles pass, the crew dances, then runs into the theater
+        setTimeout(function () { isl.classList.add('isl-party'); }, 1500);
+        setTimeout(function () { isl.classList.remove('isl-party'); isl.classList.add('isl-runin'); }, 4000);
+        setTimeout(function () { isl.classList.remove('isl-runin'); islandEditing(callId); }, 5900);
       })
       .catch(function (err) {
         uploading = false; status('');
@@ -378,7 +381,7 @@
     island.phase = 'upload'; island.pct = 0;
     $('upload-card').classList.add('hidden');
     document.body.classList.add('on-island');
-    $('editor-island').classList.remove('hidden', 'isl-done', 'isl-problem');
+    $('editor-island').classList.remove('hidden', 'isl-done', 'isl-problem', 'isl-party', 'isl-runin');
     $('editor-island').classList.add('flying');
     setTimeout(function () { $('editor-island').classList.remove('flying'); }, 2200);
     $('isl-bubble').classList.add('hidden'); $('isl-folder').classList.add('hidden');
@@ -389,7 +392,7 @@
   function islandEditing(callId) {             // phase 2: the crew works, bar shows real edit stages
     island.callId = callId; island.pct = 2; island.phase = 'edit';
     document.body.classList.add('on-island');
-    $('editor-island').classList.remove('hidden', 'isl-done', 'isl-problem');
+    $('editor-island').classList.remove('hidden', 'isl-done', 'isl-problem', 'isl-party', 'isl-runin');
     $('isl-bubble').classList.add('hidden'); $('isl-folder').classList.add('hidden');
     $('isl-err').textContent = '';
     islandSet(2, 'CHECKING IN AT THE EDIT BAY…');
