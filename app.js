@@ -593,28 +593,65 @@
     api({ action: 'myCalls' }).then(function (j) {
       lastCalls = j.calls;
       $('clips-folder').href = j.folder_url;
-      var tiles = [];
-      j.calls.forEach(function (c) {
-        if (c.status !== 'Ready') return;
-        var ids = [], names = [];
+      var calls = (j.calls || []).slice().sort(function (a, b) { return new Date(b.uploaded_at) - new Date(a.uploaded_at); });
+      var boxes = [];
+      calls.forEach(function (c) {
+        var ids = [], names = [], thumbs = [];
         try { ids = JSON.parse(c.clip_ids || '[]') || []; } catch (e) { ids = []; }
         try { names = JSON.parse(c.clip_names || '[]') || []; } catch (e) { names = []; }
-        ids.forEach(function (id, i) {
+        try { thumbs = JSON.parse(c.clip_thumbs || '[]') || []; } catch (e) { thumbs = []; }
+        if (!ids.length) return;
+        var canEdit = c.status === 'Ready' && c.mode !== 'sync' && c.mode !== 'camera' && !c.raw_gone;
+        var tiles = ids.map(function (id, i) {
           var nm = String(names[i] || 'Clip ' + (i + 1)).split(' - 20')[0];
-          tiles.push('<div class="cliptile" data-id="' + esc(id) + '">' +
-            '<div class="thumbwrap"><img loading="lazy" alt="" src="https://drive.google.com/thumbnail?id=' + esc(id) + '&sz=w400" onerror="this.parentNode.classList.add(\'noimg\')"><span class="play">▶</span></div>' +
-            '<b>' + esc(nm) + '</b><small>' + esc(fmtDate(c.uploaded_at)) + '</small>' +
-            '<a class="btn tiny dlbtn" href="https://drive.google.com/uc?export=download&id=' + esc(id) + '" target="_blank" rel="noopener">⬇ DOWNLOAD</a>' +
-            '</div>');
-        });
+          return '<div class="cliptile" data-id="' + esc(id) + '">' +
+            '<div class="thumbwrap"' + (thumbs[i] ? ' data-thumb="' + esc(thumbs[i]) + '"' : '') + '><img loading="lazy" alt="" src="https://drive.google.com/thumbnail?id=' + esc(id) + '&sz=w400" onerror="this.parentNode.classList.add(\'noimg\')"><span class="play">▶</span></div>' +
+            '<b>' + esc(nm) + '</b>' +
+            '<div class="tile-btns"><a class="btn tiny dlbtn" href="https://drive.google.com/uc?export=download&id=' + esc(id) + '" target="_blank" rel="noopener">⬇ DOWNLOAD</a>' +
+            (canEdit ? '<button class="btn tiny fixw" type="button" data-cid="' + esc(c.call_id) + '" data-clip="' + (i + 1) + '">✏ FIX A WORD</button>' : '') + '</div>' +
+            '</div>';
+        }).join('');
+        var title = c.note ? esc(c.note) : esc(fmtDateET(c.uploaded_at));
+        boxes.push('<div class="upload-box" data-call="' + esc(c.call_id) + '">' +
+          '<div class="ub-head"><b class="ub-title">🎬 ' + title + '</b>' +
+          '<small>' + (c.note ? esc(fmtDateET(c.uploaded_at)) + ' · ' : '') + ids.length + ' clip' + (ids.length === 1 ? '' : 's') + '</small>' +
+          (c.job ? '<span class="pill">Re-editing</span>' : '') + '</div>' +
+          '<div class="ub-grid">' + tiles + '</div>' +
+          (canEdit ? '<div class="more-row"><input class="mini" type="number" min="1" max="599" placeholder="minute (optional)" data-min="g' + esc(c.call_id) + '">' +
+            '<button class="btn small morec" type="button" data-cid="' + esc(c.call_id) + '">🎬 CUT MORE CLIPS</button></div>' : '') +
+          '</div>');
       });
-      el.innerHTML = tiles.length ? tiles.join('') :
+      el.innerHTML = boxes.length ? boxes.join('') :
         '<div class="empty">Your clips collect here from now on — anything cut before today lives in <a href="' + esc(j.folder_url) + '" target="_blank" rel="noopener">your Drive folder</a>.</div>';
       el.querySelectorAll('.cliptile').forEach(function (t) {
         t.addEventListener('click', function (e) {
-          if (e.target.closest('.dlbtn')) return;
+          if (e.target.closest('.dlbtn') || e.target.closest('.fixw')) return;
           window.open('https://drive.google.com/file/d/' + t.dataset.id + '/view', '_blank', 'noopener');
         });
+      });
+      el.querySelectorAll('.fixw').forEach(function (b) {
+        b.onclick = function (e) { e.stopPropagation(); openFix(b.dataset.cid, Number(b.dataset.clip)); };
+      });
+      el.querySelectorAll('.morec').forEach(function (b) {
+        b.onclick = function (e) {
+          e.stopPropagation();
+          var inp = el.querySelector('[data-min="g' + b.dataset.cid + '"]');
+          var minute = inp && inp.value ? Number(inp.value) : 0;
+          b.disabled = true; b.textContent = 'ASKING THE CREW…';
+          api({ action: 'moreClips', callId: b.dataset.cid, minute: minute })
+            .then(function () { blip(); loadClips(); })
+            .catch(function (err) { b.disabled = false; b.textContent = '🎬 CUT MORE CLIPS'; window.alert(err.message); });
+        };
+      });
+      el.querySelectorAll('.upload-box').forEach(function (box) {
+        if (!box.querySelector('[data-thumb]')) return;
+        api({ action: 'clipThumbs', callId: box.dataset.call }).then(function (r) {
+          var map = (r && r.thumbs) || {};
+          box.querySelectorAll('.thumbwrap[data-thumb]').forEach(function (w) {
+            var d = map[w.dataset.thumb];
+            if (d && /^data:image\//.test(d)) { w.querySelector('img').src = d; w.classList.remove('noimg'); }
+          });
+        }).catch(function () {});
       });
     }).catch(function (err) { el.innerHTML = '<div class="err">' + esc(err.message) + '</div>'; });
   }
@@ -788,6 +825,11 @@
   // ---------------------------------------------------------------- utils
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function fmtDate(d) { if (!d) return ''; var t = new Date(d); return isNaN(t) ? String(d) : t.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+  function fmtDateET(d) {
+    if (!d) return ''; var t = new Date(d); if (isNaN(t)) return String(d);
+    try { return t.toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }); }
+    catch (e) { return fmtDate(d); }
+  }
 
   applySession();
 })();

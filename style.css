@@ -673,6 +673,14 @@ input[type="color"] { height: 48px; padding: 4px; cursor: pointer; }
 .suggest-fab:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--gold-dark); }
 
 /* ---------- my clips gallery ---------- */
+.clip-boxes { display: flex; flex-direction: column; gap: 18px; }
+.upload-box { background: rgba(4, 26, 61, .55); border: var(--pixel) solid var(--border); outline: var(--pixel) solid var(--border-dark); padding: 14px; }
+.ub-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.ub-head .ub-title { font-family: var(--font-pixel); font-size: 12px; color: var(--gold); letter-spacing: 1px; }
+.ub-head small { opacity: .75; }
+.ub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+.tile-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.upload-box .more-row { margin: 12px 0 0; }
 .clipgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
 .cliptile { background: var(--panel-2); border: var(--pixel) solid var(--border); outline: var(--pixel) solid var(--border-dark); padding: 10px; cursor: pointer;
   color: var(--text); display: flex; flex-direction: column; gap: 6px; }
