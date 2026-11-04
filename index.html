@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css?v=3">
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=19">
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
@@ -35,7 +35,8 @@
       <div class="hearts" aria-hidden="true"><span>♥</span><span>♥</span><span>♥</span></div>
     </div>
   </div>
-  <button data-view="guide" class="navbtn guide-cta hidden" id="guide-cta">&#11088; HOW WE EDIT</button>
+  <button data-view="guide" class="navbtn guide-cta hidden" id="guide-cta">&#11088; HOW WE EDIT &#11088;</button>
+  <button class="suggest-fab hidden" id="suggest-fab" type="button" title="Suggest a feature">&#11088; SUGGEST &#11088;</button>
   </div>
   <h1 class="wordmark"><img src="assets/wordmark.png" alt="MyDear.Editor"></h1>
   <nav id="nav" class="nav hidden">
@@ -185,6 +186,7 @@
         <div class="isl-bubble hidden" id="isl-bubble">YOUR VIDEOS ARE DONE BEING EDITED!</div>
         <div class="isl-monitor"><span id="isl-mon-pct">0%</span><i></i></div>
         <img class="isl-base" src="assets/island_stage.png" alt="">
+        <img class="isl-carpet" src="assets/carpet.png" alt="">
         <img class="isl-theater" src="assets/theater.png" alt="">
         <img class="isl-clap" src="assets/clapper.png" alt="">
         <span class="isl-prop crate" aria-hidden="true"></span>
@@ -193,10 +195,10 @@
         <span class="islndr c3" aria-hidden="true"><b class="ntag">BETTY · FINAL TOUCHES</b></span>
         <span class="islndr c2 runner" aria-hidden="true"><b class="ntag">RANDY · PRODUCTION ASSISTANT</b></span>
         <span class="islndr c0" aria-hidden="true"><b class="ntag">TARANTINO · DIRECTOR</b></span>
+        <div class="done-badge">🏝 WELCOME TO</div>
+        <h2 class="isl-title">EDITOR ISLAND</h2>
         <div class="isl-confetti" id="isl-confetti" aria-hidden="true"></div>
       </div>
-      <div class="done-badge">🏝 WELCOME TO</div>
-      <h2 class="isl-title">EDITOR ISLAND</h2>
       <div class="isl-actions">
         <a class="btn gold hidden" id="isl-folder" target="_blank" rel="noopener"><span class="arr">▶</span> OPEN THIS CALL'S FOLDER</a>
         <button class="btn" id="upload-again">UPLOAD ANOTHER CALL</button>
@@ -435,7 +437,6 @@
     <div class="modal-row"><button class="btn gold" id="sug-send" type="button">SEND IT</button><button class="btn" id="sug-no" type="button">CANCEL</button></div>
     <p class="err" id="sug-err"></p><p class="status" id="sug-ok"></p>
   </div></div>
-  <button class="suggest-fab hidden" id="suggest-fab" type="button" title="Suggest a feature">💡 SUGGEST</button>
 
   <div class="sign" aria-hidden="true"><div class="sign-board">WE EDIT FOR YOU<br>SO YOU CAN<br>FOCUS ON SELLING.<div class="crown">👑</div></div><div class="sign-post"></div></div>
 </main>

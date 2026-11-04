@@ -272,6 +272,12 @@ body.on-island .steps { display: none; }
   transition: left 1.3s ease-in, bottom 1.3s ease-in, opacity .35s linear 1.15s; }
 .isl-runin .islndr::before { transform: none !important; animation: islWork .3s steps(1) infinite !important; }
 .isl-runin .ntag { opacity: 0; transition: opacity .3s linear; }
+/* red carpet from the theater doors down the front lawn */
+.isl-stage .isl-carpet { position: absolute; left: 50%; transform: translateX(-50%); bottom: 45%; width: 11%;
+  image-rendering: pixelated; }
+/* the island's name, painted on its dirt face */
+.isl-stage .done-badge { position: absolute; left: 50%; transform: translateX(-50%); bottom: 30%; margin: 0; z-index: 2; white-space: nowrap; }
+.isl-stage .isl-title { position: absolute; left: 50%; transform: translateX(-50%); bottom: 17%; margin: 0; z-index: 2; white-space: nowrap; }
 @media (max-width: 700px) {
   .isl-party .islndr::before { background-position-x: -128px !important; }
   .isl-runin .islndr::before { animation: islWorkS .3s steps(1) infinite !important; }
@@ -516,6 +522,9 @@ input[type="color"] { height: 48px; padding: 4px; cursor: pointer; }
 
 /* ---------- HOW WE EDIT button: a legendary item under the HUD ---------- */
 .hud-stack { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+/* the hud, HOW WE EDIT and SUGGEST all share the exact same footprint */
+.hud, .guide-cta, .suggest-fab { width: 240px; height: 78px; box-sizing: border-box; }
+.guide-cta, .suggest-fab { padding: 0 8px; text-align: center; line-height: 1.6; }
 .guide-cta { font-family: var(--font-pixel); font-size: 12px; letter-spacing: 1px; padding: 13px 16px; cursor: pointer;
   color: #2a1200; text-shadow: none; position: relative; overflow: hidden;
   background: linear-gradient(180deg, #ffe066 0%, var(--gold) 55%, var(--gold-2) 100%);
@@ -657,10 +666,11 @@ input[type="color"] { height: 48px; padding: 4px; cursor: pointer; }
 .modal-row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 .modal-box .cap { max-height: 130px; overflow: auto; background: #06132c; color: #b9d6f8; padding: 10px; font-size: 13px; line-height: 1.4; margin: 8px 0; }
 
-/* the suggestion lightbulb, bottom-left opposite the mute button */
-.suggest-fab { position: fixed; left: 12px; bottom: 12px; z-index: 50; font-family: var(--font-pixel); font-size: 10px; padding: 12px 14px; cursor: pointer;
-  background: #fbc716; color: #06132c; border: var(--pixel) solid var(--border); outline: var(--pixel) solid var(--border-dark); box-shadow: 0 4px 0 #7a3b00; }
-.suggest-fab:active { transform: translateY(2px); box-shadow: 0 2px 0 #7a3b00; }
+/* the suggestion box: lives in the hud stack, dressed like HOW WE EDIT */
+.suggest-fab { font-family: var(--font-pixel); font-size: 12px; letter-spacing: 1px; cursor: pointer; text-align: center;
+  color: #2a1200; background: linear-gradient(180deg, #ffe066 0%, var(--gold) 55%, var(--gold-2) 100%);
+  border: var(--pixel) solid #fff2a8; outline: var(--pixel) solid var(--gold-dark); box-shadow: 0 5px 0 var(--gold-dark); }
+.suggest-fab:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--gold-dark); }
 
 /* ---------- my clips gallery ---------- */
 .clipgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
