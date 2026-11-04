@@ -79,6 +79,28 @@ def drive_download(file_id, dest):
     return dest
 
 
+def drive_update(file_id, path, mime):
+    """Replace an existing Drive file's content in place - same id, same name, same links."""
+    with open(path, 'rb') as f:
+        r = requests.patch(f'https://www.googleapis.com/upload/drive/v3/files/{file_id}?uploadType=media&supportsAllDrives=true',
+                           headers={'Authorization': 'Bearer ' + TOKEN.get(), 'Content-Type': mime},
+                           data=f, timeout=600)
+    r.raise_for_status()
+    return file_id
+
+
+def drive_find(name, parent_id):
+    """File id of `name` inside a folder, or None."""
+    q = f"name = '{name}' and '{parent_id}' in parents and trashed = false"
+    r = requests.get('https://www.googleapis.com/drive/v3/files',
+                     params={'q': q, 'fields': 'files(id)', 'supportsAllDrives': True,
+                             'includeItemsFromAllDrives': True},
+                     headers={'Authorization': 'Bearer ' + TOKEN.get()}, timeout=60)
+    r.raise_for_status()
+    files = r.json().get('files', [])
+    return files[0]['id'] if files else None
+
+
 def drive_upload(path, name, parent_id, mime):
     size = os.path.getsize(path)
     r = requests.post('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true',
@@ -963,6 +985,216 @@ def redaction_spans(transcript, redactions):
     return spans
 
 
+# ---------------------------------------------------------------- re-edit jobs (fix a word, cut more clips)
+def _replace_words(transcript, span, frm, to):
+    """Swap every occurrence of the word/phrase `frm` for `to` inside the span. Returns count."""
+    want = [t for t in (_norm(x) for x in str(frm).split()) if t]
+    if not want:
+        return 0
+    n, count = len(want), 0
+    for sg in transcript:
+        ws = sg['words']
+        for i in range(len(ws)):
+            if not (span[0] - 2 <= ws[i]['s'] <= span[1] + 2):
+                continue
+            if [_norm(w['w']) for w in ws[i:i + n]] == want:
+                lead = ' ' if str(ws[i]['w']).startswith(' ') else ''
+                tail = re.search(r'[.,?!]+$', str(ws[i + n - 1]['w']).strip())
+                parts = str(to).split()
+                for k in range(n):                # keep timing: spread the new words over the old slots
+                    newtxt = parts[k] if k < len(parts) else ''
+                    if k == n - 1 and len(parts) > n:
+                        newtxt = ' '.join(parts[n - 1:])
+                    ws[i + k]['w'] = (lead if k == 0 else ' ') + newtxt if newtxt else ''
+                if tail and parts:
+                    ws[i + n - 1]['w'] = ws[i + n - 1]['w'].rstrip() + tail.group(0)
+                count += 1
+    for sg in transcript:                          # drop emptied word slots
+        sg['words'] = [w for w in sg['words'] if str(w['w']).strip()]
+    return count
+
+
+def process_job(call, cid, d, job, tell):
+    """Re-open a finished call: fix a word in one clip, or cut more clips. Uses the edit state the
+    first pass parked beside the clips, so there is no re-transcription. Failures put the call back
+    to Ready (engineJobFail) - a bad fix request must never turn a delivered call into a Problem."""
+    def fail(reason):
+        api('engineJobFail', callId=cid, reason=reason)
+        log.info('%s: job failed -> %s', cid, reason)
+
+    try:
+        folder = call.get('clip_folder')
+        state_id = drive_find('edit_state.json', folder) if folder else None
+        if not state_id:
+            fail('This call was delivered before re-edits existed, so we cannot re-open it. New uploads will support fixes.')
+            return
+        tell(10, 'Fetching your call back')
+        spath = os.path.join(d, 'edit_state.json')
+        drive_download(state_id, spath)
+        state = json.load(open(spath))
+        video = drive_download(call['video_id'], os.path.join(d, 'video.mp4'))
+        audio = drive_download(call['audio_id'], os.path.join(d, 'call.mp3'))
+        transcript = state['transcript']
+        tpath = os.path.join(d, 'call.json')
+        offset, drift, mid_o = state['offset'], state.get('drift', 0.0), state.get('mid_o', 0.0)
+        off_at = lambda t: offset + drift * (t - mid_o)   # noqa: E731
+        os.makedirs(os.path.join(d, 'out'), exist_ok=True)
+
+        if job.get('type') == 'fix':
+            n = int(job.get('clip', 0))
+            rec = next((c for c in state['clips'] if c['i'] == n), None)
+            frm, to = str(job.get('from', '')).strip(), str(job.get('to', '')).strip()
+            if not rec or not frm or not to:
+                fail('That fix request did not match a clip.')
+                return
+            tell(40, 'Fixing clip %d' % n)
+            count = _replace_words(transcript, (rec['start'], rec['end']), frm, to)
+            if not count:
+                fail('We could not find "%s" in the captions of clip %d, so nothing was changed. '
+                     'Check the spelling matches the caption exactly and try again.' % (frm, n))
+                return
+            json.dump(transcript, open(tpath, 'w'))
+            res = render({'video': video, 'audio': audio, 'offset': off_at((rec['start'] + rec['end']) / 2),
+                          'transcript': tpath, 'start': rec['start'], 'end': rec['end'], 'hook': rec['hook'],
+                          'out': os.path.join(d, 'out', 'fix.mp4'), 'bleep_words': state['name_keys'],
+                          'cut_spans': state['cut_spans'], 'gap_max': 0.5, 'gap_pad': 0.15,
+                          'style': state.get('style') or {}, 'zoom_turns': rec.get('zoom_turns'),
+                          'name_mode': state.get('name_mode', 'bleep')})
+            chk = compliance_check(res['caption_text'], rec['hook'])
+            if chk.get('flagged') or chk.get('unsure'):
+                fail('That change did not pass the compliance check (%s), so the clip was left as it was.'
+                     % ', '.join(map(str, chk.get('items', [])))[:200])
+                return
+            tell(85, 'Swapping in the fixed clip')
+            drive_update(rec['file_id'], res['out'], 'video/mp4')
+            rec['caption_text'] = res['caption_text']
+            json.dump(state, open(spath, 'w'))
+            drive_update(state_id, spath, 'application/json')
+            api('engineDone', callId=cid, clipFileIds=[c['file_id'] for c in state['clips']],
+                clipCount=len(state['clips']), folderId=folder, kind='fix', fixedClip=n,
+                captions=[c['caption_text'] for c in state['clips']])
+            log.info('%s: fixed clip %d ("%s" -> "%s", %d spot(s))', cid, n, frm, to, count)
+            return
+
+        if job.get('type') == 'more':
+            json.dump(transcript, open(tpath, 'w'))
+            a_min, a_max = state['a_min'], state['a_max']
+            taken = [(c['start'], c['end']) for c in state['clips']]
+            used_names = {c['name'].lower() for c in state['clips']}
+            agent_name, stamp = state.get('agent_name', 'the agent'), state.get('stamp', '')
+            spk, zoom_want = state.get('spk'), state.get('zoom_want')
+            style = state.get('style') or {}
+            usable = [sg for sg in transcript if sg['start'] >= a_min and sg['end'] <= a_max]
+            tell(30, 'Hunting for more moments')
+            moments = [m for m in map_moments(usable, agent_name, spk) if m['end'] > a_min and m['start'] < a_max]
+            minute = job.get('minute')
+            if minute:
+                t0 = max(a_min, float(minute) * 60 - 20)
+                moments.append({'kind': 'requested', 'score': 9.9, 'start': t0,
+                                'end': min(a_max, t0 + 60), 'title': 'The moment you asked for',
+                                'why': 'You asked for the moment around minute %s.' % minute})
+            fresh = [m for m in moments
+                     if not any(overlap_s(m['start'], m['end'], t0, t1) >
+                                0.5 * min(m['end'] - m['start'], t1 - t0) for t0, t1 in taken)]
+            chosen = choose_moments(fresh, 3)
+            if not chosen:
+                fail('We went back through this call but everything worth posting is already in your clips.')
+                return
+            sents = sentence_bounds(transcript, a_min, a_max)
+            rough = []
+            for m in chosen:
+                fit = fit_span(sents, m['start'], m['end'],
+                               lambda s, e: predict_duration(transcript, s, e, (), ()))
+                if fit:
+                    rough.append((m, fit[0], fit[1]))
+            if not rough:
+                fail('We found candidate moments but none could be framed into a clip.')
+                return
+            PAD_SENTS = 3
+            screens = []
+            for _m, s0, e0 in rough:
+                i0 = max(0, min(range(len(sents)), key=lambda k: abs(sents[k][0] - s0)) - PAD_SENTS)
+                j0 = min(len(sents) - 1, min(range(len(sents)), key=lambda k: abs(sents[k][1] - e0)) + PAD_SENTS)
+                screens.append((sents[i0][0], sents[j0][1], i0, j0))
+            copy_by_n, names, redactions = caption_and_redact(usable, [(s, e) for s, e, _, _ in screens], agent_name)
+            cut_spans = list(state['cut_spans']) + redaction_spans(transcript, redactions)
+            name_keys = sorted(set(state['name_keys']) | {_norm(x) for x in names if len(_norm(x)) >= 3})
+            name_mode = state.get('name_mode', 'bleep')
+            new_ids = []
+            tell(55, 'Cutting your extra clips')
+            for n, (m, s0, e0) in enumerate(rough, 1):
+                _, _, i0, j0 = screens[n - 1]
+                runs = free_runs(sents, i0, j0, taken)
+                if not runs:
+                    continue
+                mid = (s0 + e0) / 2
+                run = min(runs, key=lambda r: abs((sents[r[0]][0] + sents[r[-1]][1]) / 2 - mid))
+                fit = fit_span([sents[k] for k in run], s0, e0,
+                               lambda s, e: predict_duration(transcript, s, e, name_keys, cut_spans,
+                                                             name_mode=name_mode))
+                if not fit or any(overlap_s(fit[0], fit[1], t0, t1) > 1.0 for t0, t1 in taken):
+                    continue
+                taken.append((fit[0], fit[1]))
+                copy = copy_by_n.get(n, {})
+                i = len(state['clips']) + 1
+                hook = re.sub(r'[\\/:*?"<>|]', '', str(copy.get('hook') or m.get('title', 'Clip %d' % i)).strip())[:60] or f'Clip {i}'
+                out = os.path.join(d, 'out', f'clip{i}.mp4')
+                zturns = agent_turns(transcript, fit[0], fit[1]) if (zoom_want and spk) else None
+                try:
+                    res = render({'video': video, 'audio': audio, 'offset': off_at((fit[0] + fit[1]) / 2),
+                                  'transcript': tpath, 'start': fit[0], 'end': fit[1], 'hook': hook, 'out': out,
+                                  'bleep_words': name_keys, 'cut_spans': cut_spans, 'gap_max': 0.5,
+                                  'gap_pad': 0.15, 'style': style, 'zoom_turns': zturns, 'name_mode': name_mode})
+                except Exception as ex:
+                    log.warning('%s: extra clip render failed: %s', cid, ex)
+                    continue
+                if not CLIP_MIN <= res['duration'] <= CLIP_MAX:
+                    continue
+                chk = compliance_check(res['caption_text'], hook)
+                if chk.get('flagged') or chk.get('unsure'):
+                    continue
+                name = f'{hook} - {stamp}'
+                if name.lower() in used_names:
+                    name = f'{hook} ({i}) - {stamp}'
+                used_names.add(name.lower())
+                try:
+                    clip_dest = drive_mkdir(safe_name(hook), folder)
+                except Exception:
+                    clip_dest = folder
+                fid = drive_upload(out, name + '.mp4', clip_dest, 'video/mp4')
+                caption = str(copy.get('ig_caption', '')).strip()
+                try:
+                    txt = os.path.join(d, 'out', f'clip{i}.txt')
+                    open(txt, 'w').write(caption + '\n')
+                    drive_upload(txt, name + '.txt', clip_dest, 'text/plain')
+                except Exception:
+                    pass
+                state['clips'].append({'i': i, 'start': fit[0], 'end': fit[1], 'hook': hook, 'name': name,
+                                       'file_id': fid, 'folder_id': clip_dest,
+                                       'caption_text': res['caption_text'], 'zoom_turns': zturns,
+                                       'ig_caption': caption})
+                new_ids.append(fid)
+                log.info('%s: extra clip delivered "%s" (%.0fs)', cid, hook, res['duration'])
+            if not new_ids:
+                fail('We went back through this call but nothing new passed the quality and compliance bar.')
+                return
+            json.dump(state, open(spath, 'w'))
+            drive_update(state_id, spath, 'application/json')
+            api('engineDone', callId=cid, clipFileIds=[c['file_id'] for c in state['clips']],
+                clipCount=len(state['clips']), folderId=folder, kind='more', newCount=len(new_ids),
+                captions=[c['caption_text'] for c in state['clips']])
+            log.info('%s: done, %d extra clip(s) delivered', cid, len(new_ids))
+            return
+
+        fail('Unknown job type.')
+    except Exception as ex:
+        log.exception('%s: job failed', cid)
+        try:
+            api('engineJobFail', callId=cid, reason=f'Engine error during the re-edit: {ex}')
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------- one call
 def process(call):
     cid = call['call_id']
@@ -975,6 +1207,15 @@ def process(call):
                 api('engineProgress', callId=cid, pct=pct, label=label)
             except Exception:
                 pass
+
+        job = {}
+        try:
+            job = json.loads(call.get('job')) if call.get('job') else {}
+        except Exception:
+            job = {}
+        if job.get('type'):                      # a re-edit of a finished call, not a fresh upload
+            process_job(call, cid, d, job, tell)
+            return
 
         log.info('%s: downloading', cid)
         tell(6, 'Flying your files to the island')
@@ -1027,7 +1268,7 @@ def process(call):
 
         style = call.get('style') or {}
         stamp = when_label(call)                      # '2026-10-26 - 6.42 PM ET', shared by every name here
-        delivered, dropped, used_names = [], [], set()
+        delivered, dropped, used_names, state_clips = [], [], set(), []
 
         # each upload gets its OWN subfolder inside the agent's folder, so two calls never pile into one place
         try:
@@ -1048,7 +1289,10 @@ def process(call):
             log.warning('%s: full synced video failed: %s', cid, ex); fid_full = None
         if mode == 'sync':
             if fid_full:
-                api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest)
+                sync_tips = (['Part of your call recording did not line up with the video (your dialer may '
+                              'have paused while recording), so the synced video covers the clean stretch '
+                              'only.'] if win else [])
+                api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest, notes=sync_tips)
             else:
                 api('engineProblem', callId=cid, reason='Could not build the synced full video.')
             return
@@ -1081,6 +1325,20 @@ def process(call):
                          "the client's on the phone video, so these clips are flat. Recording on headphones - "
                          "so the client is not coming back out of your phone speaker - is what lets it work.")
             log.info('%s: zoom requested but speakers are not separable; delivering flat', cid)
+
+        # footage coaching: one or two tips in the delivery email when the engine noticed something
+        # the agent can fix next time. Only things they can act on - never scolding.
+        tips = []
+        if zoom_want and not spk:
+            tips.append('Wear headphones next time - when the client is not coming out of your phone '
+                        'speaker, we can tell your voices apart and the zoom effect works.')
+        if win:
+            tips.append('Part of your call recording did not line up with the video (your dialer may have '
+                        'paused or skipped while recording), so we edited from the clean stretch only. If '
+                        'this keeps happening, check your dialer\'s recording settings.')
+        if a_max - a_min < min(adur, vdur) - 120:
+            tips.append('A big chunk of your files had no overlap - start the camera and the recording at '
+                        'roughly the same time and more of the call makes it in.')
 
         log.info('%s: mapping the call', cid)
         moments = [m for m in map_moments(usable, agent_name, spk) if m['end'] > a_min and m['start'] < a_max]
@@ -1208,16 +1466,33 @@ def process(call):
                 open(txt, 'w').write(caption + '\n')
                 drive_upload(txt, name + '.txt', clip_dest, 'text/plain')
             delivered.append(fid)
+            state_clips.append({'i': len(delivered), 'start': float(c['start']), 'end': float(c['end']),
+                                'hook': hook, 'name': name, 'file_id': fid, 'folder_id': clip_dest,
+                                'caption_text': res['caption_text'], 'zoom_turns': zturns,
+                                'ig_caption': str(c.get('ig_caption', '')).strip()})
             log.info('%s: delivered "%s" (%.0fs, %d bleeps%s)', cid, hook, res['duration'], res['bleeps'],
                      ', HDR->709' if res.get('hdr') else '')
 
         for dmsg in dropped:
             log.info('%s: dropped -> %s', cid, dmsg)
         if delivered:
-            api('engineDone', callId=cid, clipFileIds=delivered, clipCount=len(delivered), folderId=dest)
+            # everything a later fix-a-word or cut-more-clips job needs, parked beside the clips
+            try:
+                state = {'call_id': cid, 'offset': offset, 'drift': drift, 'mid_o': mid_o,
+                         'a_min': a_min, 'a_max': a_max, 'spk': bool(spk), 'zoom_want': bool(zoom_want),
+                         'style': style, 'name_keys': list(name_keys), 'cut_spans': cut_spans,
+                         'name_mode': name_mode, 'stamp': stamp, 'agent_name': agent_name,
+                         'transcript': transcript, 'clips': state_clips}
+                spath = os.path.join(d, 'edit_state.json')
+                json.dump(state, open(spath, 'w'))
+                drive_upload(spath, 'edit_state.json', dest, 'application/json')
+            except Exception as ex:                   # jobs just won't be available for this call
+                log.warning('%s: could not park edit state: %s', cid, ex)
+            api('engineDone', callId=cid, clipFileIds=delivered, clipCount=len(delivered), folderId=dest,
+                captions=[sc['caption_text'] for sc in state_clips], notes=tips)
             log.info('%s: done, %d delivered, %d dropped', cid, len(delivered), len(dropped))
         elif fid_full:
-            api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest)
+            api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest, notes=tips)
             log.info('%s: no clip passed; full synced video delivered', cid)
         else:
             api('engineProblem', callId=cid, reason='No clip passed the compliance check.\n' + '\n'.join(dropped))
