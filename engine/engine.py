@@ -8,7 +8,7 @@ token handed out by the doorman.
 Env (see /opt/mda/.env): MDA_API_URL, MDA_ENGINE_SECRET, ANTHROPIC_API_KEY,
 optional: CLAUDE_MODEL, WHISPER_MODEL, MDA_WORK_DIR, MDA_POLL_SECONDS
 """
-import os, sys, json, time, re, shutil, subprocess, logging, datetime
+import os, sys, json, time, re, shutil, subprocess, logging, datetime, difflib
 from zoneinfo import ZoneInfo
 import numpy as np
 import requests
@@ -740,6 +740,30 @@ def sentence_bounds(transcript, a_min, a_max):
     return bounds
 
 
+def find_phrase(transcript, phrase, lo, hi):
+    """Locate a spoken word sequence inside [lo, hi]: exact normalized match first, then a fuzzy
+    pass that forgives a transcription slip or two. Returns (start, end) of the phrase or None."""
+    want = [t for t in (_norm(x) for x in str(phrase).split()) if t]
+    if len(want) < 2:
+        return None
+    words = []
+    for sg in transcript:
+        for w in sg['words']:
+            t = _norm(w['w'])
+            if t and lo - 2 <= w['s'] <= hi + 2:
+                words.append((t, float(w['s']), float(w['e'])))
+    n = len(want)
+    for i in range(len(words) - n + 1):
+        if [w[0] for w in words[i:i + n]] == want:
+            return words[i][1], words[i + n - 1][2]
+    best, best_r, tgt = None, 0.0, ' '.join(want)
+    for i in range(len(words) - n + 1):
+        r = difflib.SequenceMatcher(None, ' '.join(w[0] for w in words[i:i + n]), tgt).ratio()
+        if r > best_r:
+            best_r, best = r, (words[i][1], words[i + n - 1][2])
+    return best if best_r >= 0.8 else None
+
+
 def fit_span(sents, start, end, predict, lo=CLIP_MIN, hi=CLIP_MAX):
     """Snap to whole sentences, then grow or shrink until the FINISHED length lands in range.
 
@@ -1093,7 +1117,8 @@ def process_job(call, cid, d, job, tell):
             api('engineDone', callId=cid, clipFileIds=[c['file_id'] for c in state['clips']],
                 clipCount=len(state['clips']), folderId=folder, kind='fix', fixedClip=n,
                 captions=[c['caption_text'] for c in state['clips']],
-                thumbs=[c.get('thumb_id', '') for c in state['clips']])
+                thumbs=[c.get('thumb_id', '') for c in state['clips']],
+                igcaps=[c.get('ig_caption', '') for c in state['clips']])
             log.info('%s: fixed clip %d ("%s" -> "%s", %d spot(s))', cid, n, frm, to, count)
             return
 
@@ -1205,7 +1230,8 @@ def process_job(call, cid, d, job, tell):
             api('engineDone', callId=cid, clipFileIds=[c['file_id'] for c in state['clips']],
                 clipCount=len(state['clips']), folderId=folder, kind='more', newCount=len(new_ids),
                 captions=[c['caption_text'] for c in state['clips']],
-                thumbs=[c.get('thumb_id', '') for c in state['clips']])
+                thumbs=[c.get('thumb_id', '') for c in state['clips']],
+                igcaps=[c.get('ig_caption', '') for c in state['clips']])
             log.info('%s: done, %d extra clip(s) delivered', cid, len(new_ids))
             return
 
@@ -1363,11 +1389,27 @@ def process(call):
             tips.append('A big chunk of your files had no overlap - start the camera and the recording at '
                         'roughly the same time and more of the call makes it in.')
 
-        log.info('%s: mapping the call', cid)
-        moments = [m for m in map_moments(usable, agent_name, spk) if m['end'] > a_min and m['start'] < a_max]
-        chosen = choose_moments(moments, 5)
-        log.info('%s: %d moments found, %d chosen (%s)', cid, len(moments), len(chosen),
-                 ', '.join('%s %.0f' % (m['kind'], m['score']) for m in chosen) or 'none')
+        section_words = str(call.get('section') or '').strip()
+        if mode == 'section' and section_words:
+            # the agent quoted the exact part they want: find those words and build the one clip around them
+            log.info('%s: looking for the requested section ("%s")', cid, section_words[:60])
+            span = find_phrase(transcript, section_words, a_min, a_max)
+            if not span:
+                api('engineProblem', callId=cid,
+                    reason='We could not find the words "%s" in the part of the call that has video. '
+                           'Check they match what was said on camera (a shorter, distinctive phrase works best) '
+                           'and upload again.' % section_words[:120])
+                return
+            log.info('%s: section found at %.0f-%.0fs', cid, span[0], span[1])
+            chosen = [{'kind': 'section', 'score': 9.9, 'title': 'The part you asked for',
+                       'start': span[0], 'end': min(span[1] + 20, a_max),
+                       'why': 'You asked for this exact part of the call.'}]
+        else:
+            log.info('%s: mapping the call', cid)
+            moments = [m for m in map_moments(usable, agent_name, spk) if m['end'] > a_min and m['start'] < a_max]
+            chosen = choose_moments(moments, 5)
+            log.info('%s: %d moments found, %d chosen (%s)', cid, len(moments), len(chosen),
+                     ', '.join('%s %.0f' % (m['kind'], m['score']) for m in chosen) or 'none')
         if not chosen:
             if fid_full:
                 api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest)
@@ -1514,7 +1556,8 @@ def process(call):
                 log.warning('%s: could not park edit state: %s', cid, ex)
             api('engineDone', callId=cid, clipFileIds=delivered, clipCount=len(delivered), folderId=dest,
                 captions=[sc['caption_text'] for sc in state_clips], notes=tips,
-                thumbs=[sc.get('thumb_id', '') for sc in state_clips])
+                thumbs=[sc.get('thumb_id', '') for sc in state_clips],
+                igcaps=[sc.get('ig_caption', '') for sc in state_clips])
             log.info('%s: done, %d delivered, %d dropped', cid, len(delivered), len(dropped))
         elif fid_full:
             api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest, notes=tips)
