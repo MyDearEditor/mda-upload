@@ -846,7 +846,7 @@
   function cinemaShow() {
     var s = $('cin-screen');
     if (!cinema.list.length) {
-      s.innerHTML = '<div class="cin-empty">🎬 NOW SHOWING: THE TEAM\'S CLIPS<br>The first ones premiere here as soon as a call is delivered.</div>';
+      s.innerHTML = '<div class="cin-empty">🎬 NOW SHOWING: YOUR CLIPS<br>The first ones premiere here as soon as a call is delivered.</div>';
       $('cin-title').textContent = 'COMING SOON';
       $('cin-prev').disabled = true; $('cin-next').disabled = true;
       return;
@@ -863,10 +863,25 @@
     cinema.list = []; cinema.i = 0;
     $('cin-screen').innerHTML = '<div class="cin-empty">🎞 LOADING TONIGHT\'S SHOWINGS…</div>';
     $('cin-title').textContent = 'EDITOR ISLAND CINEMA';
-    api({ action: 'theaterReel' }).then(function (j) {     // a random reel of the whole team's recent clips
-      cinema.list = (j.clips || []).filter(function (c) { return c && c.id; });
+    var build = function (calls) {                         // a shuffled reel of this agent's own clips from the last 2 weeks
+      var cutoff = Date.now() - 14 * 86400000;
+      var pool = [];
+      (calls || []).forEach(function (c) {
+        var t = new Date(c.uploaded_at).getTime();
+        if (!(t > cutoff)) return;
+        var ids = [], names = [];
+        try { ids = JSON.parse(c.clip_ids || '[]') || []; } catch (e) { ids = []; }
+        try { names = JSON.parse(c.clip_names || '[]') || []; } catch (e) { names = []; }
+        ids.forEach(function (id, i) {
+          if (id) pool.push({ id: id, name: String(names[i] || 'Clip ' + (i + 1)).split(' - 20')[0] });
+        });
+      });
+      for (var i = pool.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t2 = pool[i]; pool[i] = pool[j]; pool[j] = t2; }
+      cinema.list = pool.slice(0, 12);
       cinemaShow();
-    }).catch(function () { cinemaShow(); });
+    };
+    if (lastCalls) build(lastCalls);
+    else api({ action: 'myCalls' }).then(function (j) { lastCalls = j.calls; build(j.calls); }).catch(function () { build([]); });
   }
   function closeCinema() { $('cinema').classList.add('hidden'); $('cin-screen').innerHTML = ''; }
   $('isl-doors').onclick = openCinema;
