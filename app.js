@@ -392,6 +392,14 @@
     $('isl-mon-pct').textContent = p + '%';
     if (label) $('isl-label').textContent = label;
   }
+  function usherInvite() {                     // one invite per visit: 15s after the island appears, up for 15s, then he just stands there
+    if (island.usherSpoke || island.usherTimer) return;
+    island.usherTimer = setTimeout(function () {
+      island.usherSpoke = true;
+      $('isl-usher-say').classList.remove('hidden'); blip();
+      island.usherTimer = setTimeout(function () { $('isl-usher-say').classList.add('hidden'); island.usherTimer = null; }, 15000);
+    }, 15000);
+  }
   function islandUploading() {                 // phase 1: the flight in, bar shows the upload itself
     island.phase = 'upload'; island.pct = 0;
     $('upload-card').classList.add('hidden');
@@ -403,6 +411,7 @@
     $('isl-err').textContent = '';
     islandSet(0, 'FLYING YOUR FILES TO EDITOR ISLAND…');
     $('isl-note').textContent = 'Keep this page open until the upload bar hits 100% — after that the crew takes it and you can go.';
+    usherInvite();                             // the countdown starts the moment they land, so they can step in during the upload
   }
   function islandEditing(callId) {             // phase 2: the crew works, bar shows real edit stages
     island.callId = callId; island.pct = 2; island.phase = 'edit';
@@ -412,13 +421,7 @@
     $('isl-err').textContent = '';
     islandSet(2, 'CHECKING IN AT THE EDIT BAY…');
     $('isl-note').textContent = 'The crew is on it. We already emailed you a receipt — you can close this page anytime, and another email lands the moment your videos are ready.';
-    $('isl-usher-say').classList.add('hidden');            // the ticket man's one invite: up at 15s, down 15s later, then he just stands there
-    clearTimeout(island.usherTimer);
-    if (!island.usherSpoke) island.usherTimer = setTimeout(function () {
-      island.usherSpoke = true;
-      $('isl-usher-say').classList.remove('hidden'); blip();
-      island.usherTimer = setTimeout(function () { $('isl-usher-say').classList.add('hidden'); }, 15000);
-    }, 15000);
+    usherInvite();                             // covers landing straight in the edit phase (page reopened mid-edit)
     islandPoll();
     island.timer = setInterval(islandPoll, 20000);
   }
