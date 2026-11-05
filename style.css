@@ -276,6 +276,19 @@ body.on-island .steps { display: none; }
 .isl-stage .isl-doors { position: absolute; left: 46.4%; width: 7.4%; bottom: 76%; height: 8.2%; z-index: 2;
   background: transparent; border: 0; padding: 0; cursor: pointer; }
 .isl-stage .isl-doors:hover, .isl-stage .isl-doors:focus-visible { box-shadow: 0 0 0 3px var(--gold), 0 0 20px rgba(251, 199, 22, .85); outline: none; }
+/* the ticket man outside the doors */
+.isl-stage .isl-usher { position: absolute; left: 54.2%; bottom: 72.6%; width: 3.3%; aspect-ratio: 20 / 26; z-index: 2;
+  background: url('assets/usher.png') center / contain no-repeat; border: 0; padding: 0; cursor: pointer;
+  image-rendering: pixelated; animation: usherBob 3.2s ease-in-out infinite; }
+@keyframes usherBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+/* his Game Boy speech bubble */
+.usher-say { position: absolute; bottom: 120%; left: 50%; transform: translateX(-50%); width: max-content; max-width: 250px;
+  font-family: var(--font-pixel); font-size: 8px; line-height: 1.9; letter-spacing: 1px; text-align: center;
+  color: #0f380f; background: #9bbc0f; border: 3px solid #0f380f; box-shadow: 0 0 0 3px #e0f8cf, 5px 7px 0 rgba(0, 0, 0, .35);
+  padding: 8px 10px; animation: pop .45s cubic-bezier(.2, 1.4, .4, 1); white-space: normal; }
+.usher-say::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+  border: 6px solid transparent; border-top-color: #0f380f; }
+.usher-say.hidden { display: none; }
 /* inside the theater: the easter egg auditorium */
 .cinema { position: fixed; inset: 0; z-index: 90; background: rgba(2, 5, 15, .93); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .cinema.hidden { display: none; }

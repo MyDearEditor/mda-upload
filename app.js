@@ -397,12 +397,21 @@
     $('isl-err').textContent = '';
     islandSet(2, 'CHECKING IN AT THE EDIT BAY…');
     $('isl-note').textContent = 'The crew is on it. We already emailed you a receipt — you can close this page anytime, and another email lands the moment your videos are ready.';
+    $('isl-usher-say').classList.add('hidden');            // the ticket man's one invite: up at 15s, down 15s later, then he just stands there
+    clearTimeout(island.usherTimer);
+    if (!island.usherSpoke) island.usherTimer = setTimeout(function () {
+      island.usherSpoke = true;
+      $('isl-usher-say').classList.remove('hidden'); blip();
+      island.usherTimer = setTimeout(function () { $('isl-usher-say').classList.add('hidden'); }, 15000);
+    }, 15000);
     islandPoll();
     island.timer = setInterval(islandPoll, 20000);
   }
   window.MDA_ISLAND = { up: islandUploading, edit: islandEditing };   // lets automated checks drive the island
   function islandReset() {
     if (island.timer) clearInterval(island.timer);
+    clearTimeout(island.usherTimer); island.usherTimer = null;
+    $('isl-usher-say').classList.add('hidden');
     island.timer = null; island.callId = null; island.pct = 0; island.phase = null;
   }
   function islandLeave() {                     // back to the upload form: the island scene stands down
@@ -837,37 +846,31 @@
   function cinemaShow() {
     var s = $('cin-screen');
     if (!cinema.list.length) {
-      s.innerHTML = '<div class="cin-empty">🎬 NOW SHOWING: YOUR CLIPS<br>The first ones premiere here the moment a call is delivered.</div>';
+      s.innerHTML = '<div class="cin-empty">🎬 NOW SHOWING: THE TEAM\'S CLIPS<br>The first ones premiere here as soon as a call is delivered.</div>';
       $('cin-title').textContent = 'COMING SOON';
       $('cin-prev').disabled = true; $('cin-next').disabled = true;
       return;
     }
     var c = cinema.list[cinema.i];
-    s.innerHTML = '<iframe src="https://drive.google.com/file/d/' + esc(c.id) + '/preview" allow="autoplay; fullscreen" allowfullscreen title="Your clip"></iframe>';
-    $('cin-title').textContent = 'NOW PLAYING ' + (cinema.i + 1) + '/' + cinema.list.length + ' · ' + c.name.toUpperCase();
+    s.innerHTML = '<iframe src="https://drive.google.com/file/d/' + esc(c.id) + '/preview" allow="autoplay; fullscreen" allowfullscreen title="A clip"></iframe>';
+    $('cin-title').textContent = 'NOW PLAYING ' + (cinema.i + 1) + '/' + cinema.list.length + ' · ' + c.name.toUpperCase() +
+      (c.agent ? ' — BY ' + String(c.agent).split(' ')[0].toUpperCase() : '');
     $('cin-prev').disabled = cinema.i === 0;
     $('cin-next').disabled = cinema.i >= cinema.list.length - 1;
   }
   function openCinema() {
     $('cinema').classList.remove('hidden'); blip();
-    var build = function (calls) {
-      var latest = (calls || []).slice().sort(function (a, b) { return new Date(b.uploaded_at) - new Date(a.uploaded_at); })
-        .filter(function (c) { var ids; try { ids = JSON.parse(c.clip_ids || '[]') || []; } catch (e) { ids = []; } c._ids = ids; return ids.length; })[0];
-      cinema.list = []; cinema.i = 0;
-      if (latest) {
-        var names = [];
-        try { names = JSON.parse(latest.clip_names || '[]') || []; } catch (e) { names = []; }
-        cinema.list = latest._ids.map(function (id, i) {
-          return { id: id, name: String(names[i] || 'Clip ' + (i + 1)).split(' - 20')[0] };
-        });
-      }
+    cinema.list = []; cinema.i = 0;
+    $('cin-screen').innerHTML = '<div class="cin-empty">🎞 LOADING TONIGHT\'S SHOWINGS…</div>';
+    $('cin-title').textContent = 'EDITOR ISLAND CINEMA';
+    api({ action: 'theaterReel' }).then(function (j) {     // a random reel of the whole team's recent clips
+      cinema.list = (j.clips || []).filter(function (c) { return c && c.id; });
       cinemaShow();
-    };
-    if (lastCalls) build(lastCalls);
-    else api({ action: 'myCalls' }).then(function (j) { lastCalls = j.calls; build(j.calls); }).catch(function () { build([]); });
+    }).catch(function () { cinemaShow(); });
   }
   function closeCinema() { $('cinema').classList.add('hidden'); $('cin-screen').innerHTML = ''; }
   $('isl-doors').onclick = openCinema;
+  $('isl-usher').onclick = openCinema;
   $('cin-exit').onclick = closeCinema;
   $('cin-prev').onclick = function () { if (cinema.i > 0) { cinema.i--; cinemaShow(); } };
   $('cin-next').onclick = function () { if (cinema.i < cinema.list.length - 1) { cinema.i++; cinemaShow(); } };
