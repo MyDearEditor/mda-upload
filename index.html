@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css?v=3">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=24">
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
@@ -144,6 +144,12 @@
         <label class="mode-opt"><input type="radio" name="mode" value="clips" checked><span><b>CLIPS + SYNCED FULL VIDEO</b><small>We cut Reels for you, and you also get the whole video with the clean call audio.</small></span></label>
         <label class="mode-opt"><input type="radio" name="mode" value="sync"><span><b>SYNCED FULL VIDEO ONLY</b><small>No clips. Just your video with the call audio synced, ready to edit yourself.</small></span></label>
         <label class="mode-opt"><input type="radio" name="mode" value="camera"><span><b>SPEAKING TO YOUR AUDIENCE</b><small>No client — just you talking to the camera. We cut the retakes, flubs and dead air; your last take always wins.</small></span></label>
+        <label class="mode-opt"><input type="radio" name="mode" value="section"><span><b>🎯 SPECIFIC SECTION</b><small>You tell us the exact part — type a few words you said, and we cut one polished clip of that moment.</small></span></label>
+      </div>
+      <div class="opt-block hidden" id="section-block">
+        <div class="mode-title">WHAT DID YOU SAY IN THAT PART?</div>
+        <input id="section-words" maxlength="200" placeholder='e.g. her grandmother got ripped off by a policy like this'>
+        <p class="m">Type a short, distinctive phrase exactly as you said it on camera. We find that moment in the call and build the clip around it.</p>
       </div>
       <label class="note-label">CALL NAME <small>(optional — becomes this call's folder name in your Drive)</small><input id="note" maxlength="200" placeholder="e.g. Facebook lead, closed on the 2nd call"></label>
       <label class="zoom-pad" id="zoom-switch">
@@ -210,6 +216,12 @@
       <div class="total-bar isl-bar"><div class="total-fill" id="isl-fill"></div><div class="total-label" id="isl-label">CHECKING IN AT THE EDIT BAY…</div><div class="total-pct" id="isl-pct">0%</div></div>
       <p class="sub isl-note" id="isl-note">The crew is on it. We already emailed you a receipt — you can close this page anytime, and another email lands the moment your videos are ready.</p>
       <p class="err" id="isl-err"></p>
+    </div>
+
+    <div class="team-board hidden" id="team-board">
+      <div class="tb-title">🏆 THIS WEEK ON EDITOR ISLAND</div>
+      <div class="podium" id="tb-podium"></div>
+      <div class="tb-rest" id="tb-rest"></div>
     </div>
 
     <div class="steps" aria-hidden="true">
@@ -397,6 +409,12 @@
       <p class="m stats-note">“Working” = uploaded or editing right now. Downloads aren’t something Google Drive reports for shared files, so “clips delivered” is the closest true number.</p>
     </div>
     <div class="panel glass">
+      <div class="row"><div class="panel-title">▶ POSTED BOARD <small>(last 30 days)</small></div><button class="btn small" id="reload-posted">REFRESH</button></div>
+      <div id="posted-agents" class="list"></div>
+      <div class="panel-title" style="margin-top:14px">▶ TOP POSTED HOOKS</div>
+      <div id="posted-hooks" class="list"></div>
+    </div>
+    <div class="panel glass">
       <div class="row"><div class="panel-title">▶ RECENT UPLOADS</div><button class="btn small" id="reload-log">REFRESH</button></div>
       <div id="log" class="list"></div>
     </div>
@@ -459,6 +477,6 @@
 
 <footer class="foot">MYDEAR ACADEMY</footer>
 <script src="config.js?v=4"></script>
-<script src="app.js?v=18"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

@@ -178,7 +178,8 @@
     if (v === 'mine') loadMine();
     if (v === 'clips') loadClips();
     if (v === 'style') loadStyle();
-    if (v === 'admin') { loadStats(); loadAgents(); loadLog(); }
+    if (v === 'admin') { loadStats(); loadAgents(); loadLog(); loadPosted(); }
+    if (v === 'upload') loadTeamBoard();
   }
   function applySession() {
     var on = !!(session && session.expires > Date.now());
@@ -243,6 +244,14 @@
     $('drop-' + kind).classList.toggle('has', !!f);
     gateUpload();
   }
+  var capStore = {};                           // call_id -> Instagram captions, for the copy button
+  function legacyCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
   function curMode() { return (document.querySelector('input[name="mode"]:checked') || {}).value || 'clips'; }
   function gateUpload() {
     $('upload-btn').disabled = !(files.video && (files.audio || curMode() === 'camera'));
@@ -295,6 +304,10 @@
   $('dup-no').onclick = function () { $('dup-modal').classList.add('hidden'); };
   function beginUpload() {
     if (uploading || !files.video || (!files.audio && curMode() !== 'camera')) return;
+    if (curMode() === 'section' && $('section-words').value.trim().split(/\s+/).filter(Boolean).length < 2) {
+      $('upload-err').textContent = 'Type at least a few of the words you said, so we can find that part of the call.';
+      $('section-words').focus(); return;
+    }
     uploading = true; $('upload-btn').disabled = true; $('upload-err').textContent = '';
     progress.video = progress.audio = 0; lastMilestone = 0; $('total-fill').style.width = '0%'; $('total-pct').textContent = '0%'; $('total-wrap').classList.remove('hidden');
     var status = function (t) { $('upload-status').textContent = t.toUpperCase().replace(/\.\.\.|…/g, ''); $('upload-status').classList.toggle('loading', /ING/.test(t.toUpperCase()));
@@ -302,11 +315,12 @@
     var callId, ids = {};
     status('Starting…');
     var mode = curMode(); save('mda_mode', mode);
-    var zoom = (mode === 'clips' || mode === 'camera') && $('zoom').checked; save('mda_zoom', zoom ? 1 : 0);
+    var zoom = (mode === 'clips' || mode === 'camera' || mode === 'section') && $('zoom').checked; save('mda_zoom', zoom ? 1 : 0);
     var nm = (document.querySelector('input[name="nm"]:checked') || {}).value || 'bleep'; save('mda_namemode', nm);
     var cap = (document.querySelector('input[name="cap"]:checked') || {}).value || 'on'; save('mda_captions', cap);
     islandUploading();                         // fly straight to the island; its bar carries the upload
-    api({ action: 'startCall', note: $('note').value, mode: mode, zoom: zoom ? 1 : 0, name_mode: nm, captions: cap })
+    api({ action: 'startCall', note: $('note').value, mode: mode, zoom: zoom ? 1 : 0, name_mode: nm, captions: cap,
+          section: mode === 'section' ? $('section-words').value.trim() : '' })
       .then(function (j) { callId = j.callId; status('Uploading video…'); return uploadOne('video', files.video, callId); })
       .then(function (id) { ids.video = id; $('drop-video').classList.add('done');
         if (mode === 'camera') return '';      // talking to the audience: there is no call recording
@@ -336,8 +350,9 @@
   function syncZoomVisible() {
     var m = curMode();
     $('zoom-switch').classList.toggle('hidden', m === 'sync');
-    $('nm-block').classList.toggle('hidden', m !== 'clips');
+    $('nm-block').classList.toggle('hidden', m !== 'clips' && m !== 'section');
     $('cap-block').classList.toggle('hidden', m !== 'camera');
+    $('section-block').classList.toggle('hidden', m !== 'section');
     $('drop-audio').classList.toggle('hidden', m === 'camera');
     var zc = document.querySelector('.zoom-copy');
     if (zc && ZOOM_COPY_CALL) zc.innerHTML = m === 'camera' ? ZOOM_COPY_CAM : ZOOM_COPY_CALL;
@@ -544,7 +559,8 @@
           '<button class="call-head" type="button">' +
             '<span class="arrow">▶</span>' +
             '<span class="call-title">' + title + (c.mode === 'sync' ? ' <span class="tag">SYNC ONLY</span>'
-              : c.mode === 'camera' ? ' <span class="tag">TO CAMERA</span>' : '') + '<small>' + esc(fmtDate(c.uploaded_at)) +
+              : c.mode === 'camera' ? ' <span class="tag">TO CAMERA</span>'
+              : c.mode === 'section' ? ' <span class="tag">ONE SECTION</span>' : '') + '<small>' + esc(fmtDate(c.uploaded_at)) +
             (c.status === 'Editing' && c.progress ? ' · ⚙ ' + esc(String(c.progress).split('|')[1] || 'editing') + ' — ' + esc(String(c.progress).split('|')[0] || '0') + '%' : '') + '</small></span>' +
             '<span class="pill ' + esc(c.status) + '">' + (c.job && c.status !== 'Ready' ? 'Re-editing' : esc(c.status)) + (c.status === 'Ready' && c.clips ? ' · ' + c.clips + ' clips' : '') + '</span>' +
           '</button>' +
@@ -606,11 +622,14 @@
       var calls = (j.calls || []).slice().sort(function (a, b) { return new Date(b.uploaded_at) - new Date(a.uploaded_at); });
       var boxes = [];
       calls.forEach(function (c) {
-        var ids = [], names = [], thumbs = [];
+        var ids = [], names = [], thumbs = [], igs = [], posted = [];
         try { ids = JSON.parse(c.clip_ids || '[]') || []; } catch (e) { ids = []; }
         try { names = JSON.parse(c.clip_names || '[]') || []; } catch (e) { names = []; }
         try { thumbs = JSON.parse(c.clip_thumbs || '[]') || []; } catch (e) { thumbs = []; }
+        try { igs = JSON.parse(c.clip_igcaps || '[]') || []; } catch (e) { igs = []; }
+        try { posted = JSON.parse(c.clip_posted || '[]') || []; } catch (e) { posted = []; }
         if (!ids.length) return;
+        capStore[c.call_id] = igs;
         var canEdit = c.status === 'Ready' && c.mode !== 'sync' && c.mode !== 'camera' && !c.raw_gone;
         var tiles = ids.map(function (id, i) {
           var nm = String(names[i] || 'Clip ' + (i + 1)).split(' - 20')[0];
@@ -618,13 +637,16 @@
             '<div class="thumbwrap"' + (thumbs[i] ? ' data-thumb="' + esc(thumbs[i]) + '"' : '') + '><img loading="lazy" alt="" src="https://drive.google.com/thumbnail?id=' + esc(id) + '&sz=w400" onerror="this.parentNode.classList.add(\'noimg\')"><span class="play">▶</span></div>' +
             '<b>' + esc(nm) + '</b>' +
             '<div class="tile-btns"><a class="btn tiny dlbtn" href="https://drive.google.com/uc?export=download&id=' + esc(id) + '" target="_blank" rel="noopener">⬇ DOWNLOAD</a>' +
+            (igs[i] ? '<button class="btn tiny capbtn" type="button" data-cid="' + esc(c.call_id) + '" data-clip="' + (i + 1) + '">📋 CAPTION</button>' : '') +
+            '<button class="btn tiny postbtn' + (posted[i] ? ' on' : '') + '" type="button" data-cid="' + esc(c.call_id) + '" data-clip="' + (i + 1) + '">' + (posted[i] ? '✔ POSTED' : '🚀 MARK POSTED') + '</button>' +
             (canEdit ? '<button class="btn tiny fixw" type="button" data-cid="' + esc(c.call_id) + '" data-clip="' + (i + 1) + '">✏ FIX A WORD</button>' : '') + '</div>' +
             '</div>';
         }).join('');
         var title = c.note ? esc(c.note) : esc(fmtDateET(c.uploaded_at));
         boxes.push('<div class="upload-box" data-call="' + esc(c.call_id) + '">' +
           '<div class="ub-head"><b class="ub-title">🎬 ' + title + '</b>' +
-          '<small>' + (c.note ? esc(fmtDateET(c.uploaded_at)) + ' · ' : '') + ids.length + ' clip' + (ids.length === 1 ? '' : 's') + '</small>' +
+          '<small>' + (c.note ? esc(fmtDateET(c.uploaded_at)) + ' · ' : '') + ids.length + ' clip' + (ids.length === 1 ? '' : 's') +
+          ' · ' + ids.filter(function (_x, k) { return posted[k]; }).length + '/' + ids.length + ' posted</small>' +
           (c.job ? '<span class="pill">Re-editing</span>' : '') + '</div>' +
           '<div class="ub-grid">' + tiles + '</div>' +
           (canEdit ? '<div class="more-row"><input class="mini" type="number" min="1" max="599" placeholder="minute (optional)" data-min="g' + esc(c.call_id) + '">' +
@@ -651,6 +673,26 @@
           api({ action: 'moreClips', callId: b.dataset.cid, minute: minute })
             .then(function () { blip(); loadClips(); })
             .catch(function (err) { b.disabled = false; b.textContent = '🎬 CUT MORE CLIPS'; window.alert(err.message); });
+        };
+      });
+      el.querySelectorAll('.capbtn').forEach(function (b) {
+        b.onclick = function (e) {
+          e.stopPropagation();
+          var cap = (capStore[b.dataset.cid] || [])[Number(b.dataset.clip) - 1] || '';
+          if (!cap) return;
+          var done = function () { var t = b.textContent; b.textContent = '✔ COPIED!'; setTimeout(function () { b.textContent = t; }, 1600); blip(); };
+          if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(cap).then(done).catch(function () { legacyCopy(cap); done(); });
+          else { legacyCopy(cap); done(); }
+        };
+      });
+      el.querySelectorAll('.postbtn').forEach(function (b) {
+        b.onclick = function (e) {
+          e.stopPropagation();
+          var on = !b.classList.contains('on');
+          b.classList.toggle('on', on); b.textContent = on ? '✔ POSTED' : '🚀 MARK POSTED'; b.disabled = true;
+          api({ action: 'markPosted', callId: b.dataset.cid, clip: Number(b.dataset.clip), on: on ? 1 : 0 })
+            .then(function () { b.disabled = false; blip(); loadClips(); })
+            .catch(function (err) { b.disabled = false; b.classList.toggle('on', !on); b.textContent = !on ? '✔ POSTED' : '🚀 MARK POSTED'; window.alert(err.message); });
         };
       });
       el.querySelectorAll('.upload-box').forEach(function (box) {
@@ -840,6 +882,47 @@
     try { return t.toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }); }
     catch (e) { return fmtDate(d); }
   }
+
+  // ---------------------------------------------------------------- team leaderboard
+  function loadTeamBoard() {
+    api({ action: 'teamBoard' }).then(function (j) {
+      var rows = (j.board || []).filter(function (r) { return r.calls > 0; });
+      if (!rows.length) { $('team-board').classList.add('hidden'); return; }
+      var medal = ['🥇', '🥈', '🥉'];
+      $('tb-podium').innerHTML = rows.slice(0, 3).map(function (r, i) {
+        return '<div class="pod p' + (i + 1) + '"><div class="pod-medal">' + medal[i] + '</div>' +
+          '<div class="pod-name">' + esc(String(r.name).split(' ')[0].toUpperCase()) + '</div>' +
+          '<div class="pod-score">' + r.calls + ' CALL' + (r.calls === 1 ? '' : 'S') + '</div>' +
+          '<div class="pod-sub">' + r.clips + ' clip' + (r.clips === 1 ? '' : 's') + '</div></div>';
+      }).join('');
+      $('tb-rest').innerHTML = rows.slice(3, 10).map(function (r, i) {
+        return '<div class="tb-row"><b>' + (i + 4) + '.</b> ' + esc(String(r.name).split(' ')[0].toUpperCase()) +
+          ' <small>' + r.calls + ' call' + (r.calls === 1 ? '' : 's') + ' · ' + r.clips + ' clip' + (r.clips === 1 ? '' : 's') + '</small></div>';
+      }).join('');
+      $('team-board').classList.remove('hidden');
+    }).catch(function () {});
+  }
+
+  // ---------------------------------------------------------------- admin posted board
+  function loadPosted() {
+    var ag = $('posted-agents'), hk = $('posted-hooks');
+    ag.innerHTML = '<div class="empty">Loading…</div>'; hk.innerHTML = '';
+    api({ action: 'adminPosted' }).then(function (j) {
+      var rows = j.agents || [];
+      if (!rows.length) { ag.innerHTML = '<div class="empty">No clips delivered in the last 30 days.</div>'; }
+      else ag.innerHTML = rows.map(function (a) {
+        var pct = a.delivered ? Math.round(a.posted / a.delivered * 100) : 0;
+        return '<div class="item"><div style="flex:1"><div class="t">' + esc(a.display_name) + '</div>' +
+          '<div class="m">' + a.posted + ' posted of ' + a.delivered + ' delivered (' + pct + '%)' +
+          (a.delivered - a.posted > 0 ? ' · <b>' + (a.delivered - a.posted) + ' waiting in Drive</b>' : ' · all posted 🎉') + '</div>' +
+          '<div class="ubar"><i style="width:' + Math.max(4, pct) + '%"></i></div></div></div>';
+      }).join('');
+      hk.innerHTML = (j.hooks || []).length ? j.hooks.map(function (h) {
+        return '<div class="item"><div><div class="t">🎬 ' + esc(h.hook) + '</div><div class="m">posted by ' + esc(h.agent) + '</div></div></div>';
+      }).join('') : '<div class="empty">Nothing marked as posted yet — the buttons are on every clip in My Clips.</div>';
+    }).catch(function (err) { ag.innerHTML = '<div class="err">' + esc(err.message) + '</div>'; });
+  }
+  if ($('reload-posted')) $('reload-posted').onclick = loadPosted;
 
   // ---------------------------------------------------------------- inside the theater (easter egg)
   var cinema = { list: [], i: 0 };

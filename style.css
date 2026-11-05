@@ -709,6 +709,28 @@ input[type="color"] { height: 48px; padding: 4px; cursor: pointer; }
 .ub-head small { opacity: .75; }
 .ub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
 .tile-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.postbtn.on { background: var(--gold); color: #2a1200; border-color: #fff2a8; }
+/* the specific-section words box */
+#section-block { background: rgba(4, 26, 61, .55); border: var(--pixel) solid var(--border); padding: 12px; margin: 10px 0; }
+#section-block input { width: 100%; box-sizing: border-box; }
+#section-block .m { margin: 8px 0 0; }
+/* this week's podium */
+.team-board { max-width: 860px; margin: 26px auto 10px; text-align: center; }
+.tb-title { font-family: var(--font-pixel); font-size: 13px; color: var(--gold); letter-spacing: 1px; text-shadow: 2px 2px 0 #000; margin-bottom: 14px; }
+.podium { display: flex; justify-content: center; align-items: flex-end; gap: 10px; }
+.pod { background: rgba(4, 26, 61, .72); border: var(--pixel) solid var(--border); outline: var(--pixel) solid var(--border-dark);
+  padding: 12px 18px 10px; min-width: 128px; }
+.pod.p1 { order: 2; padding-top: 20px; padding-bottom: 22px; border-color: var(--gold); }
+.pod.p2 { order: 1; padding-bottom: 14px; }
+.pod.p3 { order: 3; }
+.pod-medal { font-size: 26px; }
+.pod-name { font-family: var(--font-pixel); font-size: 10px; color: #fff; margin-top: 6px; text-shadow: 1px 1px 0 #000; }
+.pod-score { font-family: var(--font-pixel); font-size: 9px; color: var(--gold); margin-top: 6px; }
+.pod-sub { font-size: 12px; opacity: .8; margin-top: 3px; color: #eaf4ff; }
+.tb-rest { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; align-items: center; }
+.tb-row { font-family: var(--font-pixel); font-size: 9px; color: #eaf4ff; text-shadow: 1px 1px 0 #000; }
+.tb-row small { opacity: .8; margin-left: 6px; }
+body.on-island .team-board { display: none; }
 .upload-box .more-row { margin: 12px 0 0; }
 .clipgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
 .cliptile { background: var(--panel-2); border: var(--pixel) solid var(--border); outline: var(--pixel) solid var(--border-dark); padding: 10px; cursor: pointer;
