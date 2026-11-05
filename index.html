@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css?v=3">
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=21">
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
@@ -189,6 +189,7 @@
         <img class="isl-carpet" src="assets/carpet.png" alt="">
         <img class="isl-theater" src="assets/theater.png" alt="">
         <img class="isl-clap" src="assets/clapper.png" alt="">
+        <button class="isl-doors" id="isl-doors" type="button" aria-label="Step inside the theater" title="Step inside…"></button>
         <span class="isl-prop crate" aria-hidden="true"></span>
         <span class="isl-prop pile" aria-hidden="true"></span>
         <span class="islndr c1" aria-hidden="true"><b class="ntag">KUBRICK · MASTER EDITOR</b></span>
@@ -437,12 +438,24 @@
     <div class="modal-row"><button class="btn gold" id="sug-send" type="button">SEND IT</button><button class="btn" id="sug-no" type="button">CANCEL</button></div>
     <p class="err" id="sug-err"></p><p class="status" id="sug-ok"></p>
   </div></div>
+  <div class="cinema hidden" id="cinema" aria-label="Inside the Editor Island theater">
+    <div class="cin-room">
+      <img class="cin-bg" src="assets/theater_inside.png" alt="">
+      <div class="cin-title" id="cin-title">NOW PLAYING</div>
+      <div class="cin-screen" id="cin-screen"></div>
+      <div class="cin-ctl">
+        <button class="btn small" id="cin-prev" type="button">◀ PREV</button>
+        <button class="btn small" id="cin-next" type="button">NEXT ▶</button>
+        <button class="btn small" id="cin-exit" type="button">🚪 EXIT</button>
+      </div>
+    </div>
+  </div>
 
   <div class="sign" aria-hidden="true"><div class="sign-board">WE EDIT FOR YOU<br>SO YOU CAN<br>FOCUS ON SELLING.<div class="crown">👑</div></div><div class="sign-post"></div></div>
 </main>
 
 <footer class="foot">MYDEAR ACADEMY</footer>
 <script src="config.js?v=4"></script>
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>

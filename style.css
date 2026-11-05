@@ -272,7 +272,23 @@ body.on-island .steps { display: none; }
   transition: left 1.3s ease-in, bottom 1.3s ease-in, opacity .35s linear 1.15s; }
 .isl-runin .islndr::before { transform: none !important; animation: islWork .3s steps(1) infinite !important; }
 .isl-runin .ntag { opacity: 0; transition: opacity .3s linear; }
-/* red carpet from the theater doors down the front lawn */
+/* the theater doors: a secret way in */
+.isl-stage .isl-doors { position: absolute; left: 46.4%; width: 7.4%; bottom: 76%; height: 8.2%; z-index: 2;
+  background: transparent; border: 0; padding: 0; cursor: pointer; }
+.isl-stage .isl-doors:hover, .isl-stage .isl-doors:focus-visible { box-shadow: 0 0 0 3px var(--gold), 0 0 20px rgba(251, 199, 22, .85); outline: none; }
+/* inside the theater: the easter egg auditorium */
+.cinema { position: fixed; inset: 0; z-index: 90; background: rgba(2, 5, 15, .93); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.cinema.hidden { display: none; }
+.cin-room { position: relative; width: min(96vw, 1040px); aspect-ratio: 16 / 9; animation: pop .45s cubic-bezier(.2, 1.4, .4, 1); }
+.cin-bg { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+.cin-screen { position: absolute; left: 17.5%; top: 18.6%; width: 64.6%; height: 50.3%; background: #000;
+  display: flex; align-items: center; justify-content: center; }
+.cin-screen iframe { width: 100%; height: 100%; border: 0; }
+.cin-screen .cin-empty { color: var(--gold); font-family: var(--font-pixel); font-size: 10px; line-height: 2.1; text-align: center; padding: 14px; }
+.cin-title { position: absolute; top: 10.2%; left: 20%; right: 20%; text-align: center; font-family: var(--font-pixel);
+  font-size: 8px; color: var(--gold); letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 1px 1px 0 #000; }
+.cin-ctl { position: absolute; bottom: 2.6%; right: 2.4%; display: flex; gap: 8px; }
+.cin-ctl .btn:disabled { opacity: .4; cursor: default; }
 .isl-stage .isl-carpet { position: absolute; left: 50%; transform: translateX(-50%); bottom: 45%; width: 11%;
   image-rendering: pixelated; }
 /* the island's name, painted on its dirt face */
