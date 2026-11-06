@@ -404,10 +404,19 @@ def _render(cfg, out_path, tmp):
     np.concatenate(parts).astype(np.float32).tofile(bleeped)
 
     # ---- captions (ASS): white bold on red box, 5-7 words per card
+    st = cfg.get('style') or {}
+    insta = str(st.get('cap_look', '')).lower() == 'insta'      # Instagram-similar: one short line, word pill
     MINW, MAXW = cfg.get('cap_min_words', 5), cfg.get('cap_max_words', 7)
+    if insta:
+        MINW, MAXW = 3, 4
     cards, cur = [], []
     for i, w in enumerate(words):
-        txt = '****' if w['bleep'] else _clean(w['w'])
+        if w['bleep']:
+            txt = '****'
+        elif insta:                                       # IG keeps sentence case and the punctuation
+            txt = re.sub(r"[^\w'%$,.?!-]", '', str(w['w'])).strip()
+        else:
+            txt = _clean(w['w'])
         if not txt: continue
         if txt.startswith('-') and cur:
             cur[-1] = (cur[-1][0], cur[-1][1] + txt)
@@ -426,7 +435,6 @@ def _render(cfg, out_path, tmp):
             cards.append(cur); cur = []
     if cur: cards.append(cur)
 
-    st = cfg.get('style') or {}
     def bgr(hexcol, default):
         h = str(hexcol or default).lstrip('#')
         if len(h) != 6: h = default.lstrip('#')
@@ -437,6 +445,15 @@ def _render(cfg, out_path, tmp):
     margin_v = {'low': 330, 'mid': 520, 'high': 760}.get(st.get('position'), cfg.get('cap_margin_v', 330))
     # the title banner can ride lower too - Instagram's own icons cover the very top of the frame
     hook_v = {'high': 200, 'mid': 380, 'low': 560}.get(str(st.get('hook_position', '')).lower(), 200)
+    if insta:                                           # a card must be ONE line - split any that measure wide
+        meas_ig = _measurer(font, 64)
+        narrow = []
+        for c in cards:
+            while len(c) > 1 and meas_ig(' '.join(x[1] for x in c)) > 920:
+                half = max(1, len(c) // 2)
+                narrow.append(c[:half]); c = c[half:]
+            narrow.append(c)
+        cards = narrow
     ass = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -451,6 +468,7 @@ Style: CapR,{font},72,{cap_text},{cap_text},&H00000000,&H00000000,-1,0,0,0,100,1
 Style: BoxCap,{font},72,{cap_box},{cap_box},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 Style: HookR,{font},66,{hook_text},{hook_text},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 Style: BoxHook,{font},66,{hook_box},{hook_box},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
+Style: IG,{font},64,{cap_text},{cap_text},&H00000000,&H96000000,-1,-1,0,0,100,100,0,0,1,0,4,2,60,60,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -477,6 +495,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         s = to_out(c[0][0]['s'])
         e = to_out(cards[i + 1][0][0]['s']) if i + 1 < len(cards) else total
         e = min(e, to_out(c[-1][0]['e']) + 0.6)
+        if insta:
+            # Instagram-similar: one short italic line, and the word being spoken wears a pill
+            # in the agent's box color (a fat rounded outline reads as the IG highlight)
+            for k in range(len(c)):
+                ws = to_out(c[k][0]['s']) if k else s
+                we = to_out(c[k + 1][0]['s']) if k + 1 < len(c) else e
+                if we - ws < 0.01: continue
+                parts = []
+                for j, (_w, txt) in enumerate(c):
+                    if j == k:
+                        parts.append(f'{{\\bord16\\3c{cap_box}\\shad0}}{txt}{{\\bord0\\shad4}}')
+                    else:
+                        parts.append(txt)
+                ass += f"Dialogue: 1,{_ts(ws)},{_ts(we)},IG,,0,0,0,,{{\\q2}}{' '.join(parts)}\n"
+            continue
         if rounded:
             H, GAP = 96, 10
             lines = _wrap(meas72, ' '.join(x[1] for x in c), 840)
