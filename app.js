@@ -748,19 +748,29 @@
   function readStyle() {
     return { font: $('st-font').value, box: $('st-box').value.toUpperCase(), text: $('st-text').value.toUpperCase(),
              hook_box: $('st-hook-box').value.toUpperCase(), hook_text: $('st-hook-text').value.toUpperCase(), position: $('st-pos').value,
-             hook_position: $('st-hook-pos').value, corners: $('st-corners').value };
+             hook_position: $('st-hook-pos').value, corners: $('st-corners').value, cap_look: $('st-look').value };
   }
   function writeStyle(st) {
     $('st-font').value = st.font; $('st-box').value = st.box; $('st-text').value = st.text;
     $('st-hook-box').value = st.hook_box; $('st-hook-text').value = st.hook_text; $('st-pos').value = st.position;
     $('st-hook-pos').value = ['mid', 'low'].indexOf(st.hook_position) >= 0 ? st.hook_position : 'high';
-    $('st-corners').value = st.corners === 'rounded' ? 'rounded' : 'square'; preview();
+    $('st-corners').value = st.corners === 'rounded' ? 'rounded' : 'square';
+    $('st-look').value = st.cap_look === 'insta' ? 'insta' : 'classic'; preview();
   }
   function preview() {
     var st = readStyle(), cap = $('pv-cap'), hook = $('pv-hook');
     cap.style.fontFamily = "'" + st.font + "', sans-serif"; cap.style.background = st.box; cap.style.color = st.text;
     hook.style.fontFamily = "'" + st.font + "', sans-serif"; hook.style.background = st.hook_box; hook.style.color = st.hook_text;
     cap.style.borderRadius = hook.style.borderRadius = st.corners === 'rounded' ? '14px' : '0';
+    if (st.cap_look === 'insta') {                     // IG look: bare italic line, pill on the spoken word
+      cap.style.background = 'transparent'; cap.style.color = '#FFFFFF';
+      cap.style.fontStyle = 'italic'; cap.style.textShadow = '2px 3px 7px rgba(0,0,0,.9)';
+      cap.innerHTML = 'so what made you <span style="background:' + st.box + ';border-radius:10px;padding:1px 8px;text-shadow:none">look</span> into coverage';
+    } else {
+      cap.style.fontStyle = 'normal'; cap.style.textShadow = 'none';
+      cap.style.background = st.box; cap.style.color = st.text;
+      cap.textContent = 'SO WHAT MADE YOU LOOK INTO COVERAGE TODAY';
+    }
     cap.style.bottom = { low: '17%', mid: '27%', high: '40%' }[st.position];
     hook.style.top = { high: '9%', mid: '18.5%', low: '28%' }[st.hook_position || 'high'];
   }
@@ -772,7 +782,7 @@
         b.style.background = p.box; b.style.color = p.text; b.style.fontFamily = "'" + p.font + "', sans-serif";
         b.onclick = function () { writeStyle(p); }; $('presets').appendChild(b);
       });
-      ['st-font', 'st-box', 'st-text', 'st-hook-box', 'st-hook-text', 'st-pos', 'st-hook-pos', 'st-corners'].forEach(function (id) { $(id).oninput = preview; $(id).onchange = preview; });
+      ['st-font', 'st-box', 'st-text', 'st-hook-box', 'st-hook-text', 'st-pos', 'st-hook-pos', 'st-corners', 'st-look'].forEach(function (id) { $(id).oninput = preview; $(id).onchange = preview; });
       $('st-save').onclick = function () {
         $('st-err').textContent = ''; $('st-status').textContent = 'SAVING…'; $('st-save').disabled = true;
         api({ action: 'setStyle', style: readStyle() }).then(function () { $('st-status').textContent = 'SAVED! Your next upload will use this style.'; blip(); })
