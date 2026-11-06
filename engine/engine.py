@@ -1304,16 +1304,19 @@ def process(call):
         off_at = lambda t: offset + drift * (t - mid_o)   # noqa: E731
         log.info('%s: video %.0fs, recording %.0fs, usable window %.1f-%.1f s (%.0fs)', cid, vdur, adur, a_min, a_max, a_max - a_min)
         # a sync-only job just needs enough shared time to line up; clips need room to cut from
-        if a_max - a_min < (10 if mode == 'sync' else 45):
+        if a_max - a_min < (10 if mode == 'sync' else 20):
             api('engineProblem', callId=cid, notifyAgent=True,
-                reason=('The two files lined up, but only %s of the call was actually on camera, which is '
-                        'not enough to %s.\nYour video is %s long and your call recording '
+                reason=('The two files lined up, but only %s of the call was actually on camera - the '
+                        'minimum we can %s is 20 seconds.\nYour video is %s long and your call recording '
                         'is %s.\nFilm from the start of the call, and check your dialer captured the whole '
                         'thing, then upload again.'
                         % (mmss(max(0.0, a_max - a_min)),
-                           'work with' if mode == 'sync' else 'cut anything from',
+                           'work with' if mode == 'sync' else 'cut a clip from',
                            mmss(vdur), mmss(adur))))
             return
+        # short videos still deserve a clip: on anything under a minute, the length floor
+        # relaxes to what the video can actually give (never below 8s)
+        lo_min = CLIP_MIN if a_max - a_min >= 60 else max(8.0, min(CLIP_MIN, (a_max - a_min) * 0.6))
 
         style = call.get('style') or {}
         stamp = when_label(call)                      # '2026-10-26 - 6.42 PM ET', shared by every name here
@@ -1410,6 +1413,11 @@ def process(call):
             chosen = choose_moments(moments, 5)
             log.info('%s: %d moments found, %d chosen (%s)', cid, len(moments), len(chosen),
                      ', '.join('%s %.0f' % (m['kind'], m['score']) for m in chosen) or 'none')
+        if not chosen and (a_max - a_min) <= 95:
+            log.info('%s: nothing mapped on a short video - the whole usable stretch becomes the clip', cid)
+            chosen = [{'kind': 'highlight', 'score': 5.0, 'title': 'Your video',
+                       'start': a_min, 'end': a_max,
+                       'why': 'Short video: the whole usable stretch, cleaned up.'}]
         if not chosen:
             if fid_full:
                 api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest)
@@ -1423,7 +1431,7 @@ def process(call):
         rough = []
         for m in chosen:
             fit = fit_span(sents, m['start'], m['end'],
-                           lambda s, e: predict_duration(transcript, s, e, (), ()))
+                           lambda s, e: predict_duration(transcript, s, e, (), ()), lo=lo_min)
             if fit:
                 rough.append((m, fit[0], fit[1]))
                 log.info('%s: "%s" %.0f-%.0f -> %.0f-%.0f (~%.0fs)', cid, m.get('title', '')[:40],
@@ -1464,7 +1472,7 @@ def process(call):
             run = min(runs, key=lambda r: abs((sents[r[0]][0] + sents[r[-1]][1]) / 2 - mid))
             fit = fit_span([sents[k] for k in run], s0, e0,
                            lambda s, e: predict_duration(transcript, s, e, name_keys, cut_spans,
-                                                         name_mode=name_mode))
+                                                         name_mode=name_mode), lo=lo_min)
             if not fit:
                 dropped.append('%s: nothing left after compliance cuts' % title)
                 continue
@@ -1491,7 +1499,7 @@ def process(call):
                               'style': style, 'zoom_turns': zturns, 'name_mode': name_mode})
             except Exception as ex:
                 log.warning('%s: clip %d render failed: %s', cid, i, ex); dropped.append(f'{hook}: render failed'); continue
-            if not CLIP_MIN <= res['duration'] <= CLIP_MAX:
+            if not max(6.0, lo_min - 4) <= res['duration'] <= CLIP_MAX:
                 dropped.append(f'{hook}: {res["duration"]:.0f}s after trimming'); continue
             chk = compliance_check(res['caption_text'], hook)
             if chk.get('flagged') or chk.get('unsure'):
