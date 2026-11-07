@@ -239,6 +239,37 @@ def _envelope(x, hop=160):
     return e - e.mean()
 
 
+_ENVS = {}
+
+
+def local_refine(off, a0, a1, max_shift=2.5):
+    """Re-correlate ONE clip's stretch of the recording against the video audio, searching only a
+    small window around the global offset. A recorder that skips is only locally consistent -
+    each clip finds its own exact alignment and the skips between clips stop mattering."""
+    env = _ENVS.get('env')
+    if env is None:
+        return off
+    try:
+        import scipy.signal as s
+        EPS = 50
+        ev, ea = env
+        i0, i1 = max(0, int(a0 * EPS)), int(a1 * EPS)
+        seg = ea[i0:i1]
+        if len(seg) < 8 * EPS:
+            return off
+        seg = seg - seg.mean()
+        cs = s.correlate(ev, seg, mode='full', method='fft')
+        base = len(seg) - 1 + i0
+        k0 = max(0, base + int((off - max_shift) * EPS))
+        k1 = min(len(cs), base + int((off + max_shift) * EPS))
+        if k1 - k0 < EPS:
+            return off
+        k = k0 + int(np.argmax(cs[k0:k1]))
+        return (k - base) / float(EPS)
+    except Exception:
+        return off
+
+
 def sync_offset(video, audio, tmp):
     """Returns (offset_seconds, confidence, detail). Audio t=0 sits at video t=offset.
     Whole-file envelope correlation (no 6-minute cap, works with long pre-roll and headphone calls),
@@ -256,6 +287,7 @@ def sync_offset(video, audio, tmp):
         return 0.0, 0.0, 'call recording is silent'
 
     ev, ea = _envelope(v, HOP), _envelope(a, HOP)
+    _ENVS.clear(); _ENVS['env'] = (ev, ea)        # kept for the per-clip local re-align
     c = s.correlate(ev, ea, mode='full', method='fft')
     k = int(np.argmax(c))
     lag = k - (len(ea) - 1)
@@ -358,7 +390,22 @@ def sync_offset(video, audio, tmp):
         if cur: runs.append(cur)
         run = max(runs, key=len) if runs else []
         if len(run) < max(3, N // 2):             # trust nothing shorter than half the call
-            return None
+            # a recorder that skips every few minutes never fits ONE line, but its segments still
+            # huddle in a tight band around the true offset. Take the longest contiguous stretch
+            # inside that band - the per-clip local re-align absorbs the wobble within it.
+            med = float(np.median([p[1] for p in pts]))
+            inb = [q for q in range(len(pts)) if abs(pts[q][1] - med) <= 1.0]
+            runs2, cur2 = [], []
+            for q in range(len(pts)):
+                if q in inb:
+                    cur2.append(q)
+                else:
+                    if cur2: runs2.append(cur2)
+                    cur2 = []
+            if cur2: runs2.append(cur2)
+            run = max(runs2, key=len) if runs2 else []
+            if len(run) < max(3, N // 2):
+                return None
         rp = [pts[q] for q in run]
         ts = np.array([p[0] for p in rp]); offs = np.array([p[1] for p in rp])
         slope, icpt = (np.polyfit(ts, offs, 1) if len(rp) > 1 else (0.0, offs[0]))
@@ -1493,7 +1540,8 @@ def process(call):
             zturns = agent_turns(transcript, float(c['start']), float(c['end'])) if (zoom_want and spk) else None
             try:
                 res = render({'video': video, 'audio': audio,
-                              'offset': off_at((float(c['start']) + float(c['end'])) / 2), 'transcript': tpath,
+                              'offset': (local_refine(off_at((float(c['start']) + float(c['end'])) / 2), float(c['start']), float(c['end']))
+                                         if win else off_at((float(c['start']) + float(c['end'])) / 2)), 'transcript': tpath,
                               'start': float(c['start']), 'end': float(c['end']), 'hook': hook, 'out': out,
                               'bleep_words': name_keys, 'cut_spans': cut_spans, 'gap_max': 0.5, 'gap_pad': 0.15,
                               'style': style, 'zoom_turns': zturns, 'name_mode': name_mode})
