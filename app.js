@@ -233,7 +233,7 @@
   ['video', 'audio'].forEach(function (kind) {
     var drop = $('drop-' + kind), input = $('file-' + kind);
     drop.onclick = function () { if (!uploading) input.click(); };
-    input.onchange = function () { setFile(kind, input.files[0]); };
+    input.onchange = function () { var f = input.files[0]; if (repickDone(kind, f)) return; setFile(kind, f); };
     drop.ondragover = function (e) { e.preventDefault(); drop.classList.add('over'); };
     drop.ondragleave = function () { drop.classList.remove('over'); };
     drop.ondrop = function (e) { e.preventDefault(); drop.classList.remove('over'); if (!uploading && e.dataTransfer.files[0]) setFile(kind, e.dataTransfer.files[0]); };
@@ -321,10 +321,16 @@
     islandUploading();                         // fly straight to the island; its bar carries the upload
     api({ action: 'startCall', note: $('note').value, mode: mode, zoom: zoom ? 1 : 0, name_mode: nm, captions: cap,
           section: mode === 'section' ? $('section-words').value.trim() : '' })
-      .then(function (j) { callId = j.callId; status('Uploading video…'); return uploadOne('video', files.video, callId); })
-      .then(function (id) { ids.video = id; $('drop-video').classList.add('done');
-        if (mode === 'camera') return '';      // talking to the audience: there is no call recording
-        status('Uploading call recording…'); return uploadOne('audio', files.audio, callId); })
+      .then(function (j) {
+        callId = j.callId;
+        if (mode === 'camera' || !files.audio) return '';   // talking to the audience: there is no call recording
+        // the call recording goes FIRST: it is the small file, and whichever file waits its turn is the one
+        // a phone can release mid-upload. Seconds of waiting instead of the length of a 900 MB video.
+        status('Uploading call recording…'); return uploadOne('audio', files.audio, callId);
+      })
+      .then(function (id) { ids.audio = id; if (id) $('drop-audio').classList.add('done');
+        status('Uploading video…'); return uploadOne('video', files.video, callId); })
+      .then(function (id) { ids.video = id; $('drop-video').classList.add('done'); return ids.audio; })
       .then(function (id) { ids.audio = id; if (id) $('drop-audio').classList.add('done'); status('Finishing…');
         return api({ action: 'finishCall', callId: callId, videoFileId: ids.video, audioFileId: ids.audio || '' }); })
       .then(function () {
@@ -478,6 +484,36 @@
   }
 
   // Chunked, resumable upload straight to Google Drive (session URL comes from the doorman).
+  // A phone can release a picked file while a long upload runs - the handle survives but its bytes
+  // no longer read, and fetch() reports that as a bare "Failed to fetch". Probe before blaming the network.
+  function readable(file) {
+    try {
+      return file.slice(0, 1).arrayBuffer().then(function () { return true; }, function () { return false; });
+    } catch (e) { return Promise.resolve(false); }
+  }
+  var repick = null;                           // { kind, resolve } while we wait for the agent to re-pick
+  function askRepick(kind) {
+    return new Promise(function (resolve) {
+      repick = { kind: kind, resolve: resolve };
+      var what = kind === 'audio' ? 'call recording' : 'video';
+      $('upload-status').textContent = 'YOUR PHONE LET GO OF THE ' + what.toUpperCase();
+      $('upload-status').classList.remove('loading');
+      $('upload-err').innerHTML = 'Your phone released the ' + what + ' while the other file was uploading — ' +
+        'nothing you have already sent is lost. <b>Pick the same ' + what + ' again</b> and it carries on from here.';
+      $('repick-btn').textContent = '\u25B6 PICK THE ' + what.toUpperCase() + ' AGAIN';
+      $('repick-btn').classList.remove('hidden');
+      $('repick-btn').onclick = function () { $('file-' + kind).click(); };
+    });
+  }
+  function repickDone(kind, f) {               // called from the file inputs when a recovery pick lands
+    if (!repick || repick.kind !== kind || !f) return false;
+    var r = repick; repick = null;
+    $('repick-btn').classList.add('hidden'); $('upload-err').textContent = '';
+    files[kind] = f;
+    r.resolve(f);
+    return true;
+  }
+
   function uploadOne(kind, file, callId) {
     var key = 'mda_up_' + callId + '_' + kind;
     var saved = load(key);
@@ -487,7 +523,13 @@
         .then(function (j) { save(key, { url: j.uploadUrl, name: file.name, size: file.size }); return j.uploadUrl; });
 
     return start.then(function (url) {
-      return queryOffset(url, file.size).then(function (offset) { return sendFrom(url, file, offset, kind, 0); });
+      var run = function (f) {
+        return readable(f).then(function (ok) {
+          if (ok) return queryOffset(url, f.size).then(function (offset) { return sendFrom(url, f, offset, kind, 0); });
+          return askRepick(kind).then(run);    // the handle died: get it back, resume the same session
+        });
+      };
+      return run(file);
     }).then(function (id) { save(key, null); return id; });
   }
 
@@ -521,13 +563,27 @@
         throw new Error('upload error ' + r.status);
       })
       .catch(function (err) {
-        if (/expired/.test(err.message) || retries >= 8) throw err;
+        if (/expired|released/.test(err.message) || retries >= 8) throw err;
+        return readable(file).then(function (ok) {
+          if (!ok) throw new Error('released');   // not the network - the phone dropped the file
+          return retryLater(url, file, kind, retries);
+        });
+      })
+      .catch(function (err) {
+        if (/expired|released/.test(err.message) || retries >= 8) throw err;
         var wait = Math.min(30000, 1000 * Math.pow(2, retries));
         $('upload-status').textContent = 'Connection hiccup — resuming in ' + Math.round(wait / 1000) + 's…';
         return new Promise(function (res) { setTimeout(res, wait); })
           .then(function () { return queryOffset(url, size); })
           .then(function (off) { return sendFrom(url, file, off, kind, retries + 1); });
       });
+  }
+  function retryLater(url, file, kind, retries) {
+    var wait = Math.min(30000, 1000 * Math.pow(2, retries));
+    $('upload-status').textContent = 'Connection hiccup \u2014 resuming in ' + Math.round(wait / 1000) + 's\u2026';
+    return new Promise(function (res) { setTimeout(res, wait); })
+      .then(function () { return queryOffset(url, file.size); })
+      .then(function (off) { return sendFrom(url, file, off, kind, retries + 1); });
   }
   function finalId(url, size) {
     return fetch(url, { method: 'PUT', headers: { 'Content-Range': 'bytes */' + size } })
