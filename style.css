@@ -792,3 +792,12 @@ body.on-island .team-board { display: none; }
 .mode-opt.holo.seen .holo-face::before { animation: none; opacity: .45; }
 .mode-opt.holo.seen { box-shadow: 0 0 0 2px #1a4fd6, 0 0 10px rgba(70,160,255,.35), inset 0 0 0 1px rgba(255,255,255,.3); }
 .mode-opt.holo.seen:has(input:checked) { box-shadow: 0 0 0 2px #ffcc1a, 0 0 14px rgba(120,200,255,.5), inset 0 0 0 1px rgba(255,255,255,.4); }
+
+/* ---- How We Edit: the super editor section */
+.g-head-holo { color: #dff1ff; text-shadow: 0 0 8px rgba(80,170,255,.9), 0 0 2px #fff; }
+.g-head-holo .beta { font-style: normal; font-size: 7px; padding: 2px 5px; margin: 0 4px; background: #ffcc1a; color: #0a2f9c; border-radius: 4px; vertical-align: middle; text-shadow: none; }
+.g-script { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 14px; }
+.g-script span { font-family: var(--font-pixel); font-size: 7px; letter-spacing: .5px; padding: 6px 8px; border: 2px solid #2a62d8; background: #0b2d8a; color: #dff1ff; border-radius: 6px; }
+.g-script span.hot { border-color: var(--gold); color: var(--gold); background: #0a2f9c; box-shadow: 0 0 8px rgba(251,199,22,.35); }
+.g-script span.dim { opacity: .55; }
+.g-script span.lock { border-color: #ff5a5a; color: #ffb3b3; background: #4a0d1c; }
