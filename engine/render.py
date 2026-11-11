@@ -6,6 +6,7 @@ config keys:
   transcript              path to transcript json (list of segments with words)
   start, end              clip span in AUDIO time
   hook                    banner text (optional)
+  cards                   [(s, e, text)] in call-audio time: live-call section cards (optional)
   out                     output mp4 path
   bleep_words             lowercase name fragments: first mention in the clip is bleeped, later mentions are cut
   cut_spans               [[s,e],...] audio-time spans whose words are removed entirely
@@ -468,6 +469,8 @@ Style: CapR,{font},72,{cap_text},{cap_text},&H00000000,&H00000000,-1,0,0,0,100,1
 Style: BoxCap,{font},72,{cap_box},{cap_box},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 Style: HookR,{font},66,{hook_text},{hook_text},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 Style: BoxHook,{font},66,{hook_box},{hook_box},&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1
+Style: Card,{font},66,{hook_text},{hook_text},{hook_box},{hook_box},-1,-1,0,0,100,100,0,0,3,18,0,8,90,90,{hook_v},1
+Style: CardR,{font},66,{hook_text},{hook_text},&H00000000,&H00000000,-1,-1,0,0,100,100,0,0,1,0,0,5,0,0,0,1
 Style: IG,{font},64,{cap_text},{cap_text},&H00000000,&H96000000,-1,-1,0,0,100,100,0,0,1,0,4,2,60,60,{margin_v},1
 
 [Events]
@@ -476,7 +479,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     cap_on = cfg.get('captions', True)                     # camera mode can switch the burn-in off
     rounded = str(st.get('corners', '')).lower() == 'rounded'
     meas72 = _measurer(font, 72) if rounded else None
-    meas66 = _measurer(font, 66) if rounded else None
+    meas66 = _measurer(font, 66) if (rounded or cfg.get('cards')) else None
     if cfg.get('hook') and cap_on:
         hook_end = min(float(cfg.get('hook_seconds', HOOK_SECONDS)), total)
         if rounded:
@@ -491,6 +494,30 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         else:
             ass += (f"Dialogue: 1,{_ts(0)},{_ts(hook_end)},Hook,,0,0,0,,"
                     f"{{\\fad(0,350)}}{cfg['hook'].upper()}\n")
+    # ---- live-call cards: the script section the agent is in, in the hook's own pill, hard cut in and out
+    hook_out = min(float(cfg.get('hook_seconds', HOOK_SECONDS)), total) if (cfg.get('hook') and cap_on) else 0.0
+    live = []
+    for cs, ce, ctext in (cfg.get('cards') or []) if cap_on else []:
+        s_, e_ = to_out(max(cs, A0)), to_out(min(ce, A1))
+        if s_ < hook_out + 0.3:                                # never on top of the hook; slide under it
+            s_, e_ = hook_out + 0.3, max(e_, hook_out + 4.5)
+        e_ = min(e_, total)
+        if live and s_ < live[-1][1] + 0.1:
+            live[-1][1] = s_ - 0.1
+        if e_ - s_ >= 1.5:
+            live.append([s_, e_, str(ctext)])
+    for s_, e_, ctext in live:
+        if rounded:
+            yc = 244.0 + (hook_v - 200)
+            lines = _wrap(meas66, ctext, 840)
+            for ln in lines:
+                bw = meas66(ln) + 56
+                ass += (f"Dialogue: 1,{_ts(s_)},{_ts(e_)},BoxHook,,0,0,0,,"
+                        f"{{\\an5\\pos(540,{yc:.0f})\\p1}}{_rrect(bw, 88)}{{\\p0}}\n")
+                ass += f"Dialogue: 2,{_ts(s_)},{_ts(e_)},CardR,,0,0,0,,{{\\an5\\pos(540,{yc:.0f})}}{ln}\n"
+                yc += 98
+        else:
+            ass += f"Dialogue: 1,{_ts(s_)},{_ts(e_)},Card,,0,0,0,,{ctext}\n"
     for i, c in enumerate(cards if cap_on else []):
         s = to_out(c[0][0]['s'])
         e = to_out(cards[i + 1][0][0]['s']) if i + 1 < len(cards) else total

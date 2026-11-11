@@ -16,6 +16,7 @@ import requests
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from render import render, predict_duration  # noqa: E402
+import script_map as sm                     # noqa: E402  where in the sales script the agent is
 try:                                    # a missing reportlab must never take the whole engine down;
     import caption_pdf                  # without it every clip still ships, with a .txt caption
 except Exception as _ex:                # noqa: E402
@@ -663,7 +664,7 @@ def claude(system, user, max_tokens=4000):
 CLIP_MIN, CLIP_MAX = 20.0, 90.0          # finished length, after every cut has been made
 
 
-def map_moments(transcript, agent_name, labelled=False):
+def map_moments(transcript, agent_name, labelled=False, spans=None):
     """Pass 1 - read the whole call and mark every moment worth studying, typed and scored.
 
     Deliberately NOT asked to produce finished clips: picking and framing are different jobs, and the old
@@ -675,6 +676,15 @@ def map_moments(transcript, agent_name, labelled=False):
     else:
         lines = [f"[{sg['start']:.1f}-{sg['end']:.1f}] {sg['text'].strip()}" for sg in transcript]
         whose = 'The lines are NOT marked with who is speaking, so work it out from context.'
+    if spans:
+        tags = sm.label_lines(transcript, spans)
+        lines = [re.sub(r'^(\[[^\]]*\] )', r'\1' + tag, ln, count=1) for ln, tag in zip(lines, tags)]
+        whose += (' Lines are also tagged with the SECTION of the sales script the agent is in (every agent '
+                  'follows the same script: intro, how we work, underwriting, credibility, discovery, recap, '
+                  'product, carrier, three options, the close, confirm affordability, explain the process, '
+                  'the application, wrap-up). The best reels come from discovery, recap, the close, the '
+                  'down-sell, confirm affordability, explain the process and the wrap-up. Never pick '
+                  'underwriting or the application.')
     system = f"""You are a sales coach reviewing a recorded life-insurance call so OTHER AGENTS can learn from it.
 The agent is {agent_name}; the other voice is the client. {whose} Output strict JSON only.
 
@@ -870,19 +880,27 @@ def free_runs(sents, i0, j0, taken):
     return runs
 
 
-def caption_and_redact(transcript, spans, agent_name):
+def caption_and_redact(transcript, spans, agent_name, sections=None):
     """Pass 2 - banner, caption and the exhaustive redaction list for the spans we are actually cutting."""
     blocks = []
     for n, (s, e) in enumerate(spans, 1):
         txt = ' '.join(sg['text'].strip() for sg in transcript if sg['end'] > s and sg['start'] < e)
-        blocks.append(f'--- CLIP {n} ({e - s:.0f}s of call time) ---\n{txt}')
+        where = ''
+        if sections:
+            keys = [sm.section_at(sections, t) for t in (s, (s + e) / 2, e - 0.1)]
+            labels = [sm.BY_KEY[k]['label'].rstrip('!') for k in dict.fromkeys(keys) if k]
+            if labels:
+                where = ' - script section: ' + ' then '.join(labels)
+        blocks.append(f'--- CLIP {n} ({e - s:.0f}s of call time{where}) ---\n{txt}')
     system = f"""You write Instagram Reels copy for life-insurance agents, and you are also the compliance
 screen. The agent is {agent_name}; the other voice is the client. Output strict JSON only.
 
 For each clip give:
   n          - the clip number
   hook       - 6 words or fewer, burned on screen for the first seconds. It must make an agent stop
-               scrolling: the tension or the lesson, never a label like "Objection handling".
+               scrolling: the tension or the lesson, never a label like "Objection handling". Where a clip
+               names its script section, use it: a hook about THE CLOSE sounds like "Prospect tries to
+               bounce during the close", not a generic line.
   ig_caption - 2-3 sentences to another agent, then exactly 3 hashtags. No income claims, no carrier names.
 
 Then, across ALL clips, list EVERY word or phrase matching this list:
@@ -1122,6 +1140,9 @@ def process_job(call, cid, d, job, tell):
         offset, drift, mid_o = state['offset'], state.get('drift', 0.0), state.get('mid_o', 0.0)
         off_at = lambda t: offset + drift * (t - mid_o)   # noqa: E731
         os.makedirs(os.path.join(d, 'out'), exist_ok=True)
+        det = state.get('det') or {'anchors': [], 'spans': []}
+        all_words = [w for sg in transcript for w in sg['words']]
+        app_zone = sm.zone_spans(det['spans'], 'app')
 
         if job.get('type') == 'fix':
             n = int(job.get('clip', 0))
@@ -1138,6 +1159,7 @@ def process_job(call, cid, d, job, tell):
                 return
             json.dump(transcript, open(tpath, 'w'))
             res = render({'video': video, 'audio': audio, 'offset': off_at((rec['start'] + rec['end']) / 2),
+                          'cards': sm.plan_cards(det, all_words, rec['start'], rec['end'], bool(state.get('spk'))),
                           'transcript': tpath, 'start': rec['start'], 'end': rec['end'], 'hook': rec['hook'],
                           'out': os.path.join(d, 'out', 'fix.mp4'), 'bleep_words': state['name_keys'],
                           'cut_spans': state['cut_spans'], 'gap_max': 0.5, 'gap_pad': 0.15,
@@ -1172,14 +1194,14 @@ def process_job(call, cid, d, job, tell):
         if job.get('type') == 'more':
             json.dump(transcript, open(tpath, 'w'))
             a_min, a_max = state['a_min'], state['a_max']
-            taken = [(c['start'], c['end']) for c in state['clips']]
+            taken = [(c['start'], c['end']) for c in state['clips']] + list(app_zone)
             used_names = {c['name'].lower() for c in state['clips']}
             agent_name, stamp = state.get('agent_name', 'the agent'), state.get('stamp', '')
             spk, zoom_want = state.get('spk'), state.get('zoom_want')
             style = state.get('style') or {}
             usable = [sg for sg in transcript if sg['start'] >= a_min and sg['end'] <= a_max]
             tell(30, 'Hunting for more moments')
-            moments = [m for m in map_moments(usable, agent_name, spk) if m['end'] > a_min and m['start'] < a_max]
+            moments = [m for m in map_moments(usable, agent_name, spk, det['spans']) if m['end'] > a_min and m['start'] < a_max]
             minute = job.get('minute')
             if minute:
                 t0 = max(a_min, float(minute) * 60 - 20)
@@ -1209,7 +1231,7 @@ def process_job(call, cid, d, job, tell):
                 i0 = max(0, min(range(len(sents)), key=lambda k: abs(sents[k][0] - s0)) - PAD_SENTS)
                 j0 = min(len(sents) - 1, min(range(len(sents)), key=lambda k: abs(sents[k][1] - e0)) + PAD_SENTS)
                 screens.append((sents[i0][0], sents[j0][1], i0, j0))
-            copy_by_n, names, redactions = caption_and_redact(usable, [(s, e) for s, e, _, _ in screens], agent_name)
+            copy_by_n, names, redactions = caption_and_redact(usable, [(s, e) for s, e, _, _ in screens], agent_name, det['spans'])
             cut_spans = list(state['cut_spans']) + redaction_spans(transcript, redactions)
             name_keys = sorted(set(state['name_keys']) | {_norm(x) for x in names if len(_norm(x)) >= 3})
             name_mode = state.get('name_mode', 'bleep')
@@ -1235,6 +1257,7 @@ def process_job(call, cid, d, job, tell):
                 zturns = agent_turns(transcript, fit[0], fit[1]) if (zoom_want and spk) else None
                 try:
                     res = render({'video': video, 'audio': audio, 'offset': off_at((fit[0] + fit[1]) / 2),
+                                  'cards': sm.plan_cards(det, all_words, fit[0], fit[1], bool(spk)),
                                   'transcript': tpath, 'start': fit[0], 'end': fit[1], 'hook': hook, 'out': out,
                                   'bleep_words': name_keys, 'cut_spans': cut_spans, 'gap_max': 0.5,
                                   'gap_pad': 0.15, 'style': style, 'zoom_turns': zturns, 'name_mode': name_mode})
@@ -1415,6 +1438,16 @@ def process(call):
             log.warning('%s: speaker detection error: %s', cid, ex)
         log.info('%s: speakers: %s', cid, spk_detail if spk else 'not identified (%s)' % spk_detail)
 
+        # where in the sales script the agent is, line by line: context for the picker and the hooks,
+        # the on-screen live-call cards, and a hard no-clip zone around the application
+        try:
+            det = sm.detect(transcript)
+        except Exception as ex:
+            log.warning('%s: section detection failed: %s', cid, ex); det = {'anchors': [], 'spans': []}
+        app_zone = sm.zone_spans(det['spans'], 'app')
+        log.info('%s: script sections: %s', cid, ' > '.join('%s@%s' % (sp['key'], mmss(sp['start'])) for sp in det['spans']) or 'none recognised')
+        all_words = [w for sg in transcript for w in sg['words']]
+
         # zoom mode is per upload; it needs to know who is talking, so it rides on the speaker labels
         zoom_want = str(call.get('zoom', '')).lower() in ('1', 'true', 'yes', 'on')
         name_mode = 'cut' if str(call.get('name_mode', '')).lower() == 'cut' else 'bleep'
@@ -1456,7 +1489,8 @@ def process(call):
                        'why': 'You asked for this exact part of the call.'}]
         else:
             log.info('%s: mapping the call', cid)
-            moments = [m for m in map_moments(usable, agent_name, spk) if m['end'] > a_min and m['start'] < a_max]
+            moments = [m for m in map_moments(usable, agent_name, spk, det['spans']) if m['end'] > a_min and m['start'] < a_max]
+            moments = [m for m in moments if not any(overlap_s(m['start'], m['end'], z0, z1) > 0.5 for z0, z1 in app_zone)]
             chosen = choose_moments(moments, 5)
             log.info('%s: %d moments found, %d chosen (%s)', cid, len(moments), len(chosen),
                      ', '.join('%s %.0f' % (m['kind'], m['score']) for m in chosen) or 'none')
@@ -1497,7 +1531,7 @@ def process(call):
             j0 = min(len(sents) - 1, min(range(len(sents)), key=lambda k: abs(sents[k][1] - e0)) + PAD_SENTS)
             screens.append((sents[i0][0], sents[j0][1], i0, j0))
         log.info('%s: writing hooks, captions and redactions', cid)
-        copy_by_n, names, redactions = caption_and_redact(usable, [(s, e) for s, e, _, _ in screens], agent_name)
+        copy_by_n, names, redactions = caption_and_redact(usable, [(s, e) for s, e, _, _ in screens], agent_name, det['spans'])
         cut_spans = redaction_spans(transcript, redactions)
         name_keys = sorted({_norm(n) for n in names if len(_norm(n)) >= 3})
         log.info('%s: %d name keys, %d cut spans', cid, len(name_keys), len(cut_spans))
@@ -1507,7 +1541,7 @@ def process(call):
         # inside footage an earlier clip already claimed. rough is best-first, so when two moments
         # converge on the same stretch the stronger one keeps it and the weaker is dropped, not shipped
         # as a near-identical twin.
-        clips, taken = [], []
+        clips, taken = [], list(app_zone)       # the application is footage no clip may claim
         for n, (m, s0, e0) in enumerate(rough, 1):
             _, _, i0, j0 = screens[n - 1]
             title = str(m.get('title', 'moment'))[:40]
@@ -1538,8 +1572,9 @@ def process(call):
             tell(min(97, 57 + int(40 * (i - 1) / max(1, len(clips)))), f'Cutting clip {i} of {len(clips)}')
             out = os.path.join(d, 'out', f'clip{i}.mp4')
             zturns = agent_turns(transcript, float(c['start']), float(c['end'])) if (zoom_want and spk) else None
+            cards = sm.plan_cards(det, all_words, float(c['start']), float(c['end']), bool(spk))
             try:
-                res = render({'video': video, 'audio': audio,
+                res = render({'video': video, 'audio': audio, 'cards': cards,
                               'offset': (local_refine(off_at((float(c['start']) + float(c['end'])) / 2), float(c['start']), float(c['end']))
                                          if win else off_at((float(c['start']) + float(c['end'])) / 2)), 'transcript': tpath,
                               'start': float(c['start']), 'end': float(c['end']), 'hook': hook, 'out': out,
@@ -1591,9 +1626,11 @@ def process(call):
             state_clips.append({'i': len(delivered), 'start': float(c['start']), 'end': float(c['end']),
                                 'hook': hook, 'name': name, 'file_id': fid, 'folder_id': clip_dest,
                                 'thumb_id': tid, 'caption_text': res['caption_text'], 'zoom_turns': zturns,
-                                'ig_caption': str(c.get('ig_caption', '')).strip()})
-            log.info('%s: delivered "%s" (%.0fs, %d bleeps%s)', cid, hook, res['duration'], res['bleeps'],
-                     ', HDR->709' if res.get('hdr') else '')
+                                'ig_caption': str(c.get('ig_caption', '')).strip(),
+                                'section': (sm.BY_KEY[sm.section_at(det['spans'], float(c['start']))]['label']
+                                            if sm.section_at(det['spans'], float(c['start'])) else '')})
+            log.info('%s: delivered "%s" (%.0fs, %d bleeps%s; cards: %s)', cid, hook, res['duration'], res['bleeps'],
+                     ', HDR->709' if res.get('hdr') else '', ', '.join(t for _, _, t in cards) or 'none')
 
         for dmsg in dropped:
             log.info('%s: dropped -> %s', cid, dmsg)
@@ -1604,7 +1641,7 @@ def process(call):
                          'a_min': a_min, 'a_max': a_max, 'spk': bool(spk), 'zoom_want': bool(zoom_want),
                          'style': style, 'name_keys': list(name_keys), 'cut_spans': cut_spans,
                          'name_mode': name_mode, 'stamp': stamp, 'agent_name': agent_name,
-                         'transcript': transcript, 'clips': state_clips}
+                         'transcript': transcript, 'clips': state_clips, 'det': det}
                 spath = os.path.join(d, 'edit_state.json')
                 json.dump(state, open(spath, 'w'))
                 drive_upload(spath, 'edit_state.json', dest, 'application/json')
@@ -1613,7 +1650,8 @@ def process(call):
             api('engineDone', callId=cid, clipFileIds=delivered, clipCount=len(delivered), folderId=dest,
                 captions=[sc['caption_text'] for sc in state_clips], notes=tips,
                 thumbs=[sc.get('thumb_id', '') for sc in state_clips],
-                igcaps=[sc.get('ig_caption', '') for sc in state_clips])
+                igcaps=[sc.get('ig_caption', '') for sc in state_clips],
+                sections=[sc.get('section', '') for sc in state_clips])
             log.info('%s: done, %d delivered, %d dropped', cid, len(delivered), len(dropped))
         elif fid_full:
             api('engineDone', callId=cid, clipFileIds=[], clipCount=0, folderId=dest, notes=tips)
