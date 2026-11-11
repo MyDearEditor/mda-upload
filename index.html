@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css?v=3">
-<link rel="stylesheet" href="style.css?v=24">
+<link rel="stylesheet" href="style.css?v=25">
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
@@ -141,15 +141,9 @@
       </div>
       <div class="mode-switch" id="mode-switch" role="radiogroup" aria-label="What do you want back">
         <div class="mode-title">WHAT DO YOU WANT BACK?</div>
-        <label class="mode-opt"><input type="radio" name="mode" value="clips" checked><span><b>CLIPS + SYNCED FULL VIDEO</b><small>We cut Reels for you, and you also get the whole video with the clean call audio.</small></span></label>
+        <label class="mode-opt holo"><input type="radio" name="mode" value="clips" checked><span class="holo-face"><span class="holo-shine"></span><b>✦ NEW SUPER EDITOR LOGIC <i class="beta">BETA</i> ✦</b><small>Knows the script. We find where you are in the call — Discovery, The Close, Confirm Affordability — cut the Reels around those moments, label them on screen live-call style, and you still get the whole video with the clean call audio.</small></span></label>
         <label class="mode-opt"><input type="radio" name="mode" value="sync"><span><b>SYNCED FULL VIDEO ONLY</b><small>No clips. Just your video with the call audio synced, ready to edit yourself.</small></span></label>
         <label class="mode-opt"><input type="radio" name="mode" value="camera"><span><b>SPEAKING TO YOUR AUDIENCE</b><small>No client — just you talking to the camera. We cut the retakes, flubs and dead air; your last take always wins.</small></span></label>
-        <label class="mode-opt"><input type="radio" name="mode" value="section"><span><b>🎯 SPECIFIC SECTION</b><small>You tell us the exact part — type a few words you said, and we cut one polished clip of that moment.</small></span></label>
-      </div>
-      <div class="opt-block hidden" id="section-block">
-        <div class="mode-title">WHAT DID YOU SAY IN THAT PART?</div>
-        <input id="section-words" maxlength="200" placeholder='e.g. her grandmother got ripped off by a policy like this'>
-        <p class="m">Type a short, distinctive phrase exactly as you said it on camera. We find that moment in the call and build the clip around it.</p>
       </div>
       <label class="note-label">CALL NAME <small>(optional — becomes this call's folder name in your Drive)</small><input id="note" maxlength="200" placeholder="e.g. Facebook lead, closed on the 2nd call"></label>
       <label class="zoom-pad" id="zoom-switch">
@@ -479,6 +473,6 @@
 
 <footer class="foot">MYDEAR ACADEMY</footer>
 <script src="config.js?v=4"></script>
-<script src="app.js?v=22"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>

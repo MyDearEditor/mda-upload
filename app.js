@@ -304,10 +304,6 @@
   $('dup-no').onclick = function () { $('dup-modal').classList.add('hidden'); };
   function beginUpload() {
     if (uploading || !files.video || (!files.audio && curMode() !== 'camera')) return;
-    if (curMode() === 'section' && $('section-words').value.trim().split(/\s+/).filter(Boolean).length < 2) {
-      $('upload-err').textContent = 'Type at least a few of the words you said, so we can find that part of the call.';
-      $('section-words').focus(); return;
-    }
     uploading = true; $('upload-btn').disabled = true; $('upload-err').textContent = '';
     progress.video = progress.audio = 0; lastMilestone = 0; $('total-fill').style.width = '0%'; $('total-pct').textContent = '0%'; $('total-wrap').classList.remove('hidden');
     var status = function (t) { $('upload-status').textContent = t.toUpperCase().replace(/\.\.\.|…/g, ''); $('upload-status').classList.toggle('loading', /ING/.test(t.toUpperCase()));
@@ -315,12 +311,11 @@
     var callId, ids = {};
     status('Starting…');
     var mode = curMode(); save('mda_mode', mode);
-    var zoom = (mode === 'clips' || mode === 'camera' || mode === 'section') && $('zoom').checked; save('mda_zoom', zoom ? 1 : 0);
+    var zoom = (mode === 'clips' || mode === 'camera') && $('zoom').checked; save('mda_zoom', zoom ? 1 : 0);
     var nm = (document.querySelector('input[name="nm"]:checked') || {}).value || 'bleep'; save('mda_namemode', nm);
     var cap = (document.querySelector('input[name="cap"]:checked') || {}).value || 'on'; save('mda_captions', cap);
     islandUploading();                         // fly straight to the island; its bar carries the upload
-    api({ action: 'startCall', note: $('note').value, mode: mode, zoom: zoom ? 1 : 0, name_mode: nm, captions: cap,
-          section: mode === 'section' ? $('section-words').value.trim() : '' })
+    api({ action: 'startCall', note: $('note').value, mode: mode, zoom: zoom ? 1 : 0, name_mode: nm, captions: cap })
       .then(function (j) {
         callId = j.callId;
         if (mode === 'camera' || !files.audio) return '';   // talking to the audience: there is no call recording
@@ -356,9 +351,8 @@
   function syncZoomVisible() {
     var m = curMode();
     $('zoom-switch').classList.toggle('hidden', m === 'sync');
-    $('nm-block').classList.toggle('hidden', m !== 'clips' && m !== 'section');
+    $('nm-block').classList.toggle('hidden', m !== 'clips');
     $('cap-block').classList.toggle('hidden', m !== 'camera');
-    $('section-block').classList.toggle('hidden', m !== 'section');
     $('drop-audio').classList.toggle('hidden', m === 'camera');
     var zc = document.querySelector('.zoom-copy');
     if (zc && ZOOM_COPY_CALL) zc.innerHTML = m === 'camera' ? ZOOM_COPY_CAM : ZOOM_COPY_CALL;

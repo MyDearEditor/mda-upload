@@ -758,3 +758,31 @@ body.on-island .team-board { display: none; }
 .btn.tiny { font-size: 9px; padding: 6px 8px; }
 .more-row { display: flex; gap: 8px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
 .more-row .mini { width: 170px; }
+
+/* ---- NEW SUPER EDITOR LOGIC: a shiny blue holographic rare-card button at the top of the mode list */
+.mode-opt.holo { position: relative; overflow: hidden; border: 3px solid #bfe6ff; border-radius: 14px; padding: 0;
+  background: #0b2d8a; box-shadow: 0 0 0 2px #1a4fd6, 0 0 22px rgba(70,160,255,.55), inset 0 0 0 1px rgba(255,255,255,.35); }
+.mode-opt.holo .holo-face { position: relative; display: block; padding: 14px 16px 14px 48px; border-radius: 11px; z-index: 1;
+  background:
+    radial-gradient(120% 90% at 10% 0%, rgba(255,255,255,.28) 0%, rgba(255,255,255,0) 50%),
+    linear-gradient(135deg, #0a2f9c 0%, #1356d8 30%, #2a8dff 50%, #1356d8 70%, #0a2f9c 100%); }
+.mode-opt.holo .holo-face::before { content: ''; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: color-dodge; opacity: .6;
+  background: repeating-linear-gradient(115deg, rgba(255,0,128,.0) 0 14px, rgba(255,0,128,.35) 16px 18px, rgba(255,230,0,.35) 20px 22px,
+    rgba(0,255,170,.35) 24px 26px, rgba(80,160,255,.4) 28px 30px, rgba(255,0,128,.0) 32px 46px);
+  background-size: 260% 260%; animation: holoFoil 6s linear infinite; }
+.mode-opt.holo .holo-shine { position: absolute; top: -60%; left: -40%; width: 60%; height: 220%; pointer-events: none; transform: rotate(18deg);
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.55) 50%, rgba(255,255,255,0) 100%);
+  animation: holoSweep 3.2s ease-in-out infinite; mix-blend-mode: screen; }
+.mode-opt.holo .holo-face::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .9;
+  background-image: radial-gradient(circle, rgba(255,255,255,.9) 0 1px, transparent 1.6px), radial-gradient(circle, rgba(255,255,255,.7) 0 1px, transparent 1.8px);
+  background-size: 54px 54px, 37px 37px; background-position: 12px 8px, 30px 24px; opacity: .55; animation: holoSparkle 2.4s steps(2) infinite; }
+.mode-opt.holo input { position: absolute; left: 16px; top: 18px; z-index: 2; accent-color: #fff; }
+.mode-opt.holo b { color: #fff; font-size: 11px; text-shadow: 0 0 6px rgba(120,200,255,.9), 0 2px 0 #0a2f9c; letter-spacing: 1px; }
+.mode-opt.holo b .beta { font-style: normal; font-size: 7px; padding: 2px 5px; margin: 0 2px; background: #ffcc1a; color: #0a2f9c; border-radius: 4px; vertical-align: middle; text-shadow: none; }
+.mode-opt.holo small { color: #eaf6ff; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
+.mode-opt.holo:has(input:checked) { border-color: #fff; box-shadow: 0 0 0 2px #ffcc1a, 0 0 30px rgba(120,200,255,.9), inset 0 0 0 1px rgba(255,255,255,.5); }
+.mode-opt.holo:has(input:checked) b { color: #fff; }
+@keyframes holoFoil { 0% { background-position: 0% 0%; } 100% { background-position: 100% 100%; } }
+@keyframes holoSweep { 0% { left: -60%; } 55% { left: 120%; } 100% { left: 120%; } }
+@keyframes holoSparkle { 0% { background-position: 12px 8px, 30px 24px; } 50% { background-position: 40px 20px, 10px 40px; } 100% { background-position: 12px 8px, 30px 24px; } }
+@media (prefers-reduced-motion: reduce) { .mode-opt.holo .holo-face::before, .mode-opt.holo .holo-shine, .mode-opt.holo .holo-face::after { animation: none; } }
