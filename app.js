@@ -209,6 +209,9 @@
   document.querySelectorAll('.navbtn[data-view]').forEach(function (b) { b.onclick = function () { show(b.dataset.view); }; });
   // the HOW WE EDIT button glows only until its first ever click on this device
   if (load('mda_guide_seen')) $('guide-cta').classList.add('seen');
+  // the SUPER EDITOR card is full holographic until the agent has used it once; after that it keeps its foil but stops flashing
+  var holo = document.querySelector('.mode-opt.holo');
+  if (holo && load('mda_super_seen')) holo.classList.add('seen');
   $('guide-cta').addEventListener('click', function () { save('mda_guide_seen', 1); this.classList.add('seen'); });
   document.querySelectorAll('[data-go]').forEach(function (b) { b.onclick = function () { show(b.dataset.go); if (b.dataset.go === 'login') setTimeout(function () { $('login-user').focus(); }, 300); }; });
   $('book-btn').href = CFG.BOOK_URL || '#';
@@ -311,6 +314,7 @@
     var callId, ids = {};
     status('Starting…');
     var mode = curMode(); save('mda_mode', mode);
+    if (mode === 'clips' && holo) { save('mda_super_seen', 1); holo.classList.add('seen'); }
     var zoom = (mode === 'clips' || mode === 'camera') && $('zoom').checked; save('mda_zoom', zoom ? 1 : 0);
     var nm = (document.querySelector('input[name="nm"]:checked') || {}).value || 'bleep'; save('mda_namemode', nm);
     var cap = (document.querySelector('input[name="cap"]:checked') || {}).value || 'on'; save('mda_captions', cap);

@@ -786,3 +786,9 @@ body.on-island .team-board { display: none; }
 @keyframes holoSweep { 0% { left: -60%; } 55% { left: 120%; } 100% { left: 120%; } }
 @keyframes holoSparkle { 0% { background-position: 12px 8px, 30px 24px; } 50% { background-position: 40px 20px, 10px 40px; } 100% { background-position: 12px 8px, 30px 24px; } }
 @media (prefers-reduced-motion: reduce) { .mode-opt.holo .holo-face::before, .mode-opt.holo .holo-shine, .mode-opt.holo .holo-face::after { animation: none; } }
+
+/* used once: the foil lines stay, the sweep and sparkles stop, the glow settles */
+.mode-opt.holo.seen .holo-shine, .mode-opt.holo.seen .holo-face::after { display: none; }
+.mode-opt.holo.seen .holo-face::before { animation: none; opacity: .45; }
+.mode-opt.holo.seen { box-shadow: 0 0 0 2px #1a4fd6, 0 0 10px rgba(70,160,255,.35), inset 0 0 0 1px rgba(255,255,255,.3); }
+.mode-opt.holo.seen:has(input:checked) { box-shadow: 0 0 0 2px #ffcc1a, 0 0 14px rgba(120,200,255,.5), inset 0 0 0 1px rgba(255,255,255,.4); }
