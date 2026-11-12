@@ -926,11 +926,51 @@
       if (!j.rows.length) { el.innerHTML = '<div class="empty">No uploads yet.</div>'; return; }
       el.innerHTML = j.rows.map(function (r) {
         var st = { started: 'Uploading', uploaded: 'Uploaded', editing: 'Editing', ready: 'Ready', problem: 'Problem' }[r.status] || r.status;
-        return '<div class="item"><div><div class="t">' + esc(r.username) + ' · ' + esc(fmtDate(r.uploaded_at)) + '</div>' +
+        var ids = [], names = [], thumbs = [], secs = [];
+        try { ids = JSON.parse(r.clip_ids || '[]') || []; } catch (e) { ids = []; }
+        try { names = JSON.parse(r.clip_names || '[]') || []; } catch (e) { names = []; }
+        try { thumbs = JSON.parse(r.clip_thumbs || '[]') || []; } catch (e) { thumbs = []; }
+        try { secs = JSON.parse(r.clip_sections || '[]') || []; } catch (e) { secs = []; }
+        // a call stuck in Editing (engine restarted under it) can be restarted after an hour
+        var stuck = r.status === 'editing' && (Date.now() - new Date(r.uploaded_at).getTime()) > 3600000;
+        var tiles = ids.map(function (id, i) {
+          var nm = String(names[i] || 'Clip ' + (i + 1)).split(' - 20')[0];
+          return '<div class="cliptile" data-id="' + esc(id) + '">' +
+            '<div class="thumbwrap"' + (thumbs[i] ? ' data-thumb="' + esc(thumbs[i]) + '"' : '') + '><img loading="lazy" alt="" src="https://drive.google.com/thumbnail?id=' + esc(id) + '&sz=w400" onerror="this.parentNode.classList.add(\'noimg\')"><span class="play">▶</span></div>' +
+            '<b>' + esc(nm) + '</b>' + (secs[i] ? '<small class="sec">' + esc(secs[i]) + '</small>' : '') +
+            '<div class="tile-btns"><a class="btn tiny dlbtn" href="https://drive.google.com/uc?export=download&id=' + esc(id) + '" target="_blank" rel="noopener">⬇ DOWNLOAD</a></div></div>';
+        }).join('');
+        return '<div class="item logrow' + (ids.length ? ' has-clips' : '') + '" data-call="' + esc(r.call_id) + '"><div>' +
+          '<div class="t">' + (ids.length ? '<span class="arrow">▶</span> ' : '') + esc(r.username) + ' · ' + esc(fmtDate(r.uploaded_at)) + '</div>' +
           '<div class="m">' + esc(r.call_id) + ' · video ' + (r.video_MB || 0) + ' MB · audio ' + (r.audio_MB || 0) + ' MB' + (r.note ? ' · ' + esc(r.note) : '') +
           (r.problem ? ' · ' + esc(r.problem) : '') + '</div></div><span class="pill ' + esc(st) + '">' + esc(st) + (r.clips_delivered ? ' · ' + r.clips_delivered + ' clips' : '') + '</span>' +
-          (r.status === 'problem' ? '<button class="btn small" data-retry="' + esc(r.call_id) + '">RETRY</button>' : '') + '</div>';
+          (r.status === 'problem' || stuck ? '<button class="btn small" data-retry="' + esc(r.call_id) + '">' + (stuck ? 'RESTART' : 'RETRY') + '</button>' : '') +
+          (ids.length ? '<div class="log-clips hidden"><div class="ub-grid">' + tiles + '</div>' +
+            (r.clip_folder ? '<a class="btn tiny" href="https://drive.google.com/drive/folders/' + esc(r.clip_folder) + '" target="_blank" rel="noopener">📁 OPEN FOLDER</a>' : '') + '</div>' : '') +
+          '</div>';
       }).join('');
+      // click a row to drop its clips open; previews load the first time, same as My Clips
+      el.querySelectorAll('.logrow.has-clips').forEach(function (row) {
+        row.querySelector('.t').addEventListener('click', function () {
+          var box = row.querySelector('.log-clips'); box.classList.toggle('hidden'); row.classList.toggle('open');
+          if (box.classList.contains('hidden') || row.dataset.loaded) return;
+          row.dataset.loaded = '1';
+          if (!box.querySelector('[data-thumb]')) return;
+          api({ action: 'adminClipThumbs', callId: row.dataset.call }).then(function (r) {
+            var map = (r && r.thumbs) || {};
+            box.querySelectorAll('.thumbwrap[data-thumb]').forEach(function (w) {
+              var d = map[w.dataset.thumb];
+              if (d && /^data:image\//.test(d)) { w.querySelector('img').src = d; w.classList.remove('noimg'); }
+            });
+          }).catch(function () {});
+        });
+      });
+      el.querySelectorAll('.logrow .cliptile').forEach(function (t) {
+        t.addEventListener('click', function (e) {
+          if (e.target.closest('.dlbtn')) return;
+          window.open('https://drive.google.com/file/d/' + t.dataset.id + '/view', '_blank', 'noopener');
+        });
+      });
       el.querySelectorAll('button[data-retry]').forEach(function (btn) {
         btn.onclick = function () {
           btn.disabled = true; btn.textContent = 'QUEUED…';

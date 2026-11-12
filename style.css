@@ -801,3 +801,11 @@ body.on-island .team-board { display: none; }
 .g-script span.hot { border-color: var(--gold); color: var(--gold); background: #0a2f9c; box-shadow: 0 0 8px rgba(251,199,22,.35); }
 .g-script span.dim { opacity: .55; }
 .g-script span.lock { border-color: #ff5a5a; color: #ffb3b3; background: #4a0d1c; }
+
+/* ---- admin: recent uploads drop open to show the clips */
+.logrow.has-clips .t { cursor: pointer; }
+.logrow .arrow { display: inline-block; font-size: 10px; color: var(--gold); transition: transform .15s; }
+.logrow.open .arrow { transform: rotate(90deg); }
+.log-clips { grid-column: 1 / -1; padding-top: 10px; border-top: 2px solid var(--border-dark); margin-top: 6px; }
+.log-clips .ub-grid { margin-bottom: 10px; }
+.cliptile small.sec { display: block; font-family: var(--font-pixel); font-size: 7px; color: var(--gold); margin: -2px 0 6px; }
