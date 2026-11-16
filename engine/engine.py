@@ -282,10 +282,10 @@ def sync_offset(video, audio, tmp):
     a = wav8k(audio, os.path.join(tmp, 'a.wav'))
     v_rms = float(np.sqrt(np.mean(v.astype(np.float64) ** 2)))
     a_rms = float(np.sqrt(np.mean(a.astype(np.float64) ** 2)))
-    if v_rms < 1.0:
-        return 0.0, 0.0, 'video has no usable audio track'
+    if v_rms < 1.0:                               # every exit returns (offset, conf, detail, drift, window)
+        return 0.0, 0.0, 'video has no usable audio track', 0.0, None
     if a_rms < 1.0:
-        return 0.0, 0.0, 'call recording is silent'
+        return 0.0, 0.0, 'call recording is silent', 0.0, None
 
     ev, ea = _envelope(v, HOP), _envelope(a, HOP)
     _ENVS.clear(); _ENVS['env'] = (ev, ea)        # kept for the per-clip local re-align
