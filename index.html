@@ -9,10 +9,18 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;700&family=Poppins:wght@700&family=Montserrat:wght@800&family=Bebas+Neue&family=Anton&family=Oswald:wght@700&family=Bangers&family=Luckiest+Guy&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="theme.css?v=3">
-<link rel="stylesheet" href="style.css?v=28">
+<link rel="stylesheet" href="style.css?v=29">
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
+<div id="maint" class="hidden" role="alert">
+  <div class="maint-card">
+    <div class="maint-ico">🚧</div>
+    <div class="maint-title">WORKING ON SITE</div>
+    <p>The crew is making some changes to Editor Island right now.<br>Uploads are paused — hang on to your files and check back soon.</p>
+    <p class="maint-sub">Anything you already uploaded is safe.</p>
+  </div>
+</div>
 <div class="backdrop" aria-hidden="true">
   <div class="sky"></div>
   <div class="clouds"></div>
@@ -487,7 +495,18 @@
 </main>
 
 <footer class="foot">MYDEAR ACADEMY</footer>
-<script src="config.js?v=4"></script>
+<script src="config.js?v=5"></script>
+<script>
+(function () {
+  try {
+    if (!(window.MDA_CONFIG && window.MDA_CONFIG.MAINTENANCE)) return;
+    if (/[?&]crew\b/.test(location.search)) sessionStorage.setItem('mda_crew', '1');
+    var s = null; try { s = JSON.parse(localStorage.getItem('mda_session') || 'null'); } catch (e) {}
+    if ((s && s.admin) || sessionStorage.getItem('mda_crew')) return;
+    document.getElementById('maint').classList.remove('hidden');
+  } catch (e) {}
+})();
+</script>
 <script src="app.js?v=25"></script>
 </body>
 </html>
