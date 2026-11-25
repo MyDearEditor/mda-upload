@@ -184,6 +184,7 @@
   function applySession() {
     var on = !!(session && session.expires > Date.now());
     if (!on) session = null;
+    if (window.mdaMaint) setTimeout(window.mdaMaint, 0);   // after the session is saved
     $('nav').classList.toggle('hidden', !on);
     $('guide-cta').classList.toggle('hidden', !on);
     $('suggest-fab').classList.toggle('hidden', !on);

@@ -497,16 +497,18 @@
 <footer class="foot">MYDEAR ACADEMY</footer>
 <script src="config.js?v=5"></script>
 <script>
-(function () {
+// re-checked on every sign-in and sign-out, so switching from admin to an agent account brings the sign back
+window.mdaMaint = function () {
   try {
-    if (!(window.MDA_CONFIG && window.MDA_CONFIG.MAINTENANCE)) return;
+    var on = !!(window.MDA_CONFIG && window.MDA_CONFIG.MAINTENANCE);
     if (/[?&]crew\b/.test(location.search)) sessionStorage.setItem('mda_crew', '1');
     var s = null; try { s = JSON.parse(localStorage.getItem('mda_session') || 'null'); } catch (e) {}
-    if ((s && s.admin) || sessionStorage.getItem('mda_crew')) return;
-    document.getElementById('maint').classList.remove('hidden');
+    if ((s && s.admin) || sessionStorage.getItem('mda_crew')) on = false;
+    document.getElementById('maint').classList.toggle('hidden', !on);
   } catch (e) {}
-})();
+};
+window.mdaMaint();
 </script>
-<script src="app.js?v=25"></script>
+<script src="app.js?v=26"></script>
 </body>
 </html>
